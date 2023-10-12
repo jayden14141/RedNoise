@@ -3,6 +3,7 @@
 #include <CanvasPoint.h>
 #include <Colour.h>
 #include <DrawingWindow.h>
+#include <TextureMap.h>
 #include <Utils.h>
 #include <fstream>
 #include <vector>
@@ -11,10 +12,8 @@
 #define WIDTH 320
 #define HEIGHT 240
 
-bool compare(CanvasPoint p1, CanvasPoint p2) {
-	return p1.y < p2.y;
-}
 
+// Interpolation for colour (rgb) => vec3
 std::vector<glm::vec3> interpolateThreeElementValues (glm::vec3 from, glm::vec3 to, int numberOfValues) {
 	std::vector<glm::vec3> v;
 	glm::vec3 dif = to - from;
@@ -24,6 +23,14 @@ std::vector<glm::vec3> interpolateThreeElementValues (glm::vec3 from, glm::vec3 
 		glm::vec3 a((float)i, (float)i, (float)i);
 		v.push_back(from + unit * a);
 	}
+	return v;
+}
+
+std::vector<CanvasPoint> interpolateCanvasPoint (CanvasPoint from, CanvasPoint to, int numberOfValues) {
+	float xUnit = (to.x - from.x) / (float)(numberOfValues - 1);
+	float yUnit = (to.y - from.y) / (float)(numberOfValues - 1);
+	std::vector<CanvasPoint> v;
+	for(int i = 0; i < numberOfValues; i++) v.push_back(CanvasPoint(from.x+xUnit*i, from.y+yUnit*i));
 	return v;
 }
 
@@ -53,7 +60,7 @@ std::vector<float> interpolateSingleFloats(float from, float to, int numberOfVal
 void line(DrawingWindow &window, CanvasPoint from, CanvasPoint to, Colour c) {
 	float xDiff = to.x - from.x;
 	float yDiff = to.y - from.y;
-	float numberOfSteps = std::max(abs(xDiff), abs (yDiff));
+	float numberOfSteps = std::max(abs(xDiff), abs(yDiff));
 	float xStepSize = xDiff / numberOfSteps;
 	float yStepSize = yDiff / numberOfSteps;
 	uint32_t colour = (255 << 24) + (c.red << 16) + (c.green << 8) + c.blue;
@@ -65,24 +72,13 @@ void line(DrawingWindow &window, CanvasPoint from, CanvasPoint to, Colour c) {
 	}
 }
 
-void unfilledTriangle(DrawingWindow &window) {
-	CanvasPoint v0 = CanvasPoint(rand() % window.width - 1, rand() % window.height - 1);
-	CanvasPoint v1 = CanvasPoint(rand() % window.width - 1, rand() % window.height - 1);
-	CanvasPoint v2 = CanvasPoint(rand() % window.width - 1, rand() % window.height - 1);
-	CanvasTriangle t = CanvasTriangle(v0, v1, v2);
-
-	Colour c = Colour(rand() % 256, rand() % 256, rand() % 256);
-	line(window, t.v0(), t.v1(), c);
-	line(window, t.v1(), t.v2(), c);
-	line(window, t.v2(), t.v0(), c);
-}
-
-void unfilledTriangle(DrawingWindow &window, CanvasPoint v0, CanvasPoint v1, CanvasPoint v2, Colour colour) {
-	CanvasTriangle t = CanvasTriangle(v0, v1, v2);
-
-	line(window, t.v0(), t.v1(), colour);
-	line(window, t.v1(), t.v2(), colour);
-	line(window, t.v2(), t.v0(), colour);
+std::vector<uint32_t> textureColour (TextureMap tm, CanvasPoint from, CanvasPoint to, int numberOfValues) {
+	std::vector<CanvasPoint> texturePoint = interpolateCanvasPoint(from, to, numberOfValues);
+	std::vector<uint32_t> colour;
+	for (int i = 0; i < numberOfValues; i++) {
+		colour.push_back(tm.pixels[round(texturePoint[i].x + texturePoint[i].y * tm.width)]);
+	}
+	return colour;
 }
 
 void fill(DrawingWindow &window, bool bottomFlat, CanvasPoint left, CanvasPoint right, CanvasPoint p, Colour c) {
@@ -106,43 +102,149 @@ void fill(DrawingWindow &window, bool bottomFlat, CanvasPoint left, CanvasPoint 
 	}
 }
 
+// All the rake rows are passed as v1 and v2
+void fillTexture(DrawingWindow &window, TextureMap tm, bool bottomFlat, CanvasTriangle texture, CanvasTriangle canvas) {
+	int numberOfRow = abs(canvas[0].y - canvas[1].y) + 1;
+
+	std::vector<CanvasPoint> c_left = interpolateCanvasPoint(canvas[0], canvas[1], numberOfRow);
+	std::vector<CanvasPoint> c_right = interpolateCanvasPoint(canvas[0], canvas[2], numberOfRow);
+
+	std::vector<CanvasPoint> t_left = interpolateCanvasPoint(texture[0], texture[1], numberOfRow);
+	std::vector<CanvasPoint> t_right = interpolateCanvasPoint(texture[0], texture[2], numberOfRow);
+	// std::cout << t_left[14] << std::endl;
+	// std::cout << t_right[14] << std::endl;
+	// for (int i = 0; i < t_left.size(); i++) {
+    //         std::cout << t_left[i] << std::endl;
+    // }
+
+	// if(bottomFlat) {
+	// 	for (int i = 0; i < numberOfRow; i++) {
+	// 		int numberOfCol = round(c_right[i].x - c_left[i].x);
+	// 		std::vector<CanvasPoint> rakeRow = interpolateCanvasPoint(c_left[i], c_right[i], numberOfCol);
+	// 		std::vector<uint32_t> colour = textureColour(tm, t_left[i], t_right[i], numberOfCol);
+	// 		for (int j = 0; j < numberOfCol; j++) {
+	// 			window.setPixelColour(round(rakeRow[j].x), round(rakeRow[j].y), colour[j]);
+	// 		}
+	// 	}
+	// } else {
+	// 	for (int i = 0; i < numberOfRow; i++) {
+	// 		int numberOfCol = round(c_right[i].x - c_left[i].x);
+	// 		std::vector<CanvasPoint> rakeRow = interpolateCanvasPoint(c_left[i], c_right[i], numberOfCol);
+	// 		std::vector<uint32_t> colour = textureColour(tm, t_left[i], t_right[i], numberOfCol);
+	// 		for (int j = 0; j < numberOfCol; j++) {
+	// 			window.setPixelColour(round(rakeRow[j].x), round(rakeRow[j].y), colour[j]);
+	// 		}
+	// 	}
+	// }
+	for (int i = 0; i < numberOfRow; i++) {
+			int numberOfCol = round(c_right[i].x - c_left[i].x);
+			std::vector<CanvasPoint> rakeRow = interpolateCanvasPoint(c_left[i], c_right[i], numberOfCol);
+			std::vector<uint32_t> colour = textureColour(tm, t_left[i], t_right[i], numberOfCol);
+			for (int j = 0; j < numberOfCol; j++) {
+				window.setPixelColour(round(rakeRow[j].x), round(rakeRow[j].y), colour[j]);
+			}
+	}
+}
+
+void sort(bool yAxis, CanvasTriangle &t) {
+	if (yAxis) {
+		if (t[0].y > t[1].y) std::swap(t[0], t[1]);
+		if (t[0].y > t[2].y) std::swap(t[0], t[2]);
+		if (t[1].y > t[2].y) std::swap(t[1], t[2]); 
+	} else {
+		if (t[0].x > t[1].x) std::swap(t[0], t[1]);
+		if (t[0].x > t[2].x) std::swap(t[0], t[2]);
+		if (t[1].x > t[2].x) std::swap(t[1], t[2]); 
+	}
+}
+
+// Helper function that specifies left and right line within the pointer
+void leftAndRight(CanvasTriangle &t, CanvasPoint &left, CanvasPoint &right) {
+
+	sort(true, t);
+	// yDiff : xDiff = y1 - y0: alpha - x0
+	// alpha = (xDiff * (y1-y0) / yDiff) + x0
+	float xDiff = t[2].x - t[0].x;
+	float yDiff = t[2].y - t[0].y;
+	float alpha = (xDiff * (t[1].y-t[0].y) / yDiff) + t[0].x;
+
+	if (t[1].x < alpha) {
+		left = t[1];
+		right = CanvasPoint(alpha, t[1].y);
+	} else {
+		left = CanvasPoint(alpha, t[1].y);
+		right = t[1];
+	}
+}
+
+void unfilledTriangle(DrawingWindow &window) {
+	CanvasPoint v0 = CanvasPoint(rand() % window.width - 1, rand() % window.height - 1);
+	CanvasPoint v1 = CanvasPoint(rand() % window.width - 1, rand() % window.height - 1);
+	CanvasPoint v2 = CanvasPoint(rand() % window.width - 1, rand() % window.height - 1);
+	CanvasTriangle t = CanvasTriangle(v0, v1, v2);
+
+	Colour c = Colour(rand() % 256, rand() % 256, rand() % 256);
+	line(window, t.v0(), t.v1(), c);
+	line(window, t.v1(), t.v2(), c);
+	line(window, t.v2(), t.v0(), c);
+}
+
+void unfilledTriangle(DrawingWindow &window, CanvasPoint v0, CanvasPoint v1, CanvasPoint v2, Colour colour) {
+	CanvasTriangle t = CanvasTriangle(v0, v1, v2);
+
+	line(window, t.v0(), t.v1(), colour);
+	line(window, t.v1(), t.v2(), colour);
+	line(window, t.v2(), t.v0(), colour);
+}
+
+
 void filledTriangle(DrawingWindow &window) {
 	CanvasPoint v0 = CanvasPoint(rand() % window.width - 1, rand() % window.height - 1);
 	CanvasPoint v1 = CanvasPoint(rand() % window.width - 1, rand() % window.height - 1);
 	CanvasPoint v2 = CanvasPoint(rand() % window.width - 1, rand() % window.height - 1);
-	// CanvasTriangle t = CanvasTriangle(v0, v1, v2);
+	CanvasTriangle t = CanvasTriangle(v0, v1, v2);
+	
+	CanvasPoint left, right;
+	leftAndRight(t, left, right);
 
 	Colour c = Colour(rand() % 256, rand() % 256, rand() % 256);
-	std::vector<CanvasPoint> v;
-	v.push_back(v0);
-	v.push_back(v1);
-	v.push_back(v2);
-	sort(v.begin(), v.end(), compare);
-
-	// yDiff : xDiff = y1 - y0: alpha - x0
-	// alpha = (xDiff * (y1-y0) / yDiff) + x0
-	float xDiff = v[2].x - v[0].x;
-	float yDiff = v[2].y - v[0].y;
-	float alpha = (xDiff * (v[1].y-v[0].y) / yDiff) + v[0].x;
-	CanvasPoint left, right;
-
-	if (v[1].x < alpha) {
-		left = v[1];
-		right = CanvasPoint(alpha, v[1].y);
-	} else {
-		left = CanvasPoint(alpha, v[1].y);
-		right = v[1];
-	}
-
-	// line(window, v1_a, v1_b, Colour(255, 255, 255));
-	fill(window, true, left, right, v[0], c);
-	fill(window, false, left, right, v[2], c);
+	fill(window, true, left, right, t[0], c);
+	fill(window, false, left, right, t[2], c);
+	// line(window, left, right, Colour(255, 255, 255));
 
 	unfilledTriangle(window, v0, v1, v2, Colour(255, 255, 255));
 }
 
+void textureMapping(DrawingWindow &window, CanvasTriangle texture, CanvasTriangle canvas) {
+	std::string filename = "texture.ppm";
+	TextureMap tM = TextureMap(filename);
+	CanvasPoint tLeft, tRight;
+
+	CanvasPoint cLeft, cRight;
+	leftAndRight(canvas, cLeft, cRight);
+	leftAndRight(texture, tLeft, tRight);
+	
+	float txDiff = texture[2].x - texture[0].x;
+	float tyDiff = texture[2].y - texture[0].y;
+	// Proportion = length from top to left(right) / length of whole side
+	float proportion = (cRight.x - canvas[0].x) / (canvas[2].x - canvas[0].x);
+	// When rake row starts(ends) in left vertex
+	if(cLeft.x == canvas[1].x) {
+		tLeft = texture[1];
+		tRight = CanvasPoint(texture[0].x + txDiff * proportion, texture[0].y + tyDiff * proportion);
+	} else {
+		tRight = texture[1];
+		tLeft = CanvasPoint(texture[0].x + txDiff * proportion, texture[1].y + tyDiff * proportion);
+	}
+
+	fillTexture(window, tM, true, CanvasTriangle(texture[0], tLeft, tRight), CanvasTriangle(canvas[0], cLeft, cRight));
+	fillTexture(window, tM, false, CanvasTriangle(texture[2], tLeft, tRight), CanvasTriangle(canvas[2], cLeft, cRight));
+
+	unfilledTriangle(window, canvas[0], canvas[1], canvas[2], Colour(255, 255, 255));
+}
+
 void draw(DrawingWindow &window) {
-	window.clearPixels();
+	// window.clearPixels();
 	// for (size_t y = 0; y < window.height; y++) {
 	// 	for (size_t x = 0; x < window.width; x++) {
 	// 		float red = rand() % 256;
@@ -185,11 +287,24 @@ void draw(DrawingWindow &window) {
 
 
 	// Wk3 Task02
-	// line(window, CanvasPoint(0,0), CanvasPoint(window.width/2, window.height/2));
-	// line(window, CanvasPoint(window.width - 1, 0), CanvasPoint(window.width/2, window.height/2));
-	// line(window, CanvasPoint(window.width/2, 0), CanvasPoint(window.width/2, window.height - 1));
-	// line(window, CanvasPoint(window.width/3, window.height/2), CanvasPoint(window.width*2/3, window.height/2));
+	// Colour c = Colour(255, 255, 255);
+	// line(window, CanvasPoint(0,0), CanvasPoint(window.width/2, window.height/2), c);
+	// line(window, CanvasPoint(window.width - 1, 0), CanvasPoint(window.width/2, window.height/2), c);
+	// line(window, CanvasPoint(window.width/2, 0), CanvasPoint(window.width/2, window.height - 1), c);
+	// line(window, CanvasPoint(window.width/3, window.height/2), CanvasPoint(window.width*2/3, window.height/2), c);
 
+	// Wk3 Task06
+	CanvasPoint t0 = CanvasPoint(195, 5);
+	CanvasPoint t1 = CanvasPoint(395, 380);
+	CanvasPoint t2 = CanvasPoint(65, 330);
+	CanvasTriangle t = CanvasTriangle(t0, t1, t2);
+
+	CanvasPoint c0 = CanvasPoint(160, 10);
+	CanvasPoint c1 = CanvasPoint(300, 230);
+	CanvasPoint c2 = CanvasPoint(10, 150);
+	CanvasTriangle c = CanvasTriangle(c0, c1, c2);
+
+	textureMapping(window, t, c);
 }
 
 void handleEvent(SDL_Event event, DrawingWindow &window) {
@@ -209,7 +324,7 @@ void handleEvent(SDL_Event event, DrawingWindow &window) {
 int main(int argc, char *argv[]) {
 	DrawingWindow window = DrawingWindow(WIDTH, HEIGHT, false);
 	SDL_Event event;
-
+	draw(window);
 	// std::vector<float> result;
 	// result = interpolateSingleFloats(2.2, 8.5, 7);
 	// for(size_t i=0; i<result.size(); i++) std::cout << result[i] << " ";
@@ -222,7 +337,6 @@ int main(int argc, char *argv[]) {
 	// 	std::cout << "(" << result[i][0] << "," << result[i][1] << "," << result[i][2] << ")" << " ";
 	// 	std::cout << std::endl;
 	// }
-
 	while (true) {
 		// We MUST poll for events - otherwise the window will freeze !
 		if (window.pollForInputEvents(event)) handleEvent(event, window);
