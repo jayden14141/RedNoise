@@ -3,6 +3,7 @@
 #include <CanvasPoint.h>
 #include <Colour.h>
 #include <DrawingWindow.h>
+#include <ModelTriangle.h>
 #include <TextureMap.h>
 #include <Utils.h>
 #include <fstream>
@@ -12,6 +13,40 @@
 #define WIDTH 320
 #define HEIGHT 240
 
+std::vector<ModelTriangle> parseObj (const std::string &filename, float sF) {
+	std::ifstream inputStream(filename);
+	std::string nextLine;
+	std::vector<glm::vec3> vertices;
+	std::vector<std::vector<int>> facets;
+	std::vector<ModelTriangle> mT;
+
+	// Match the index of obj file
+	vertices.push_back(glm::vec3(0,0,0));
+
+	while(std::getline(inputStream, nextLine)) {
+		if (!nextLine.empty()) {
+			if (nextLine.at(0) == 'v') {
+				std::vector<std::string> s = split(nextLine, ' ');
+				vertices.push_back(glm::vec3(sF * std::stof(s[1]), sF * std::stof(s[2]), sF * std::stof(s[3])));
+			} else if (nextLine.at(0) == 'f') {
+				std::vector<std::string> s = split(nextLine, ' ');
+				std::vector<int> facet;
+				facet.push_back(std::stoi(split(s[1], '/').at(0)));
+				facet.push_back(std::stoi(split(s[2], '/').at(0)));
+				facet.push_back(std::stoi(split(s[3], '/').at(0)));
+				facets.push_back(facet);
+			} else {
+				continue;
+			}
+		}
+	}
+	inputStream.close();
+
+	for (std::vector<int> f : facets) {
+		mT.push_back(ModelTriangle(vertices[f[0]], vertices[f[1]], vertices[f[2]], Colour()));
+	}
+	return mT;
+}
 
 // Interpolation for colour (rgb) => vec3
 std::vector<glm::vec3> interpolateThreeElementValues (glm::vec3 from, glm::vec3 to, int numberOfValues) {
@@ -191,8 +226,7 @@ void filledTriangle(DrawingWindow &window) {
 	unfilledTriangle(window, v0, v1, v2, Colour(255, 255, 255));
 }
 
-void textureMapping(DrawingWindow &window, CanvasTriangle texture, CanvasTriangle canvas) {
-	std::string filename = "texture.ppm";
+void textureMapping(const std::string &filename, DrawingWindow &window, CanvasTriangle texture, CanvasTriangle canvas) {
 	TextureMap tM = TextureMap(filename);
 	CanvasPoint tLeft, tRight;
 
@@ -280,7 +314,8 @@ void draw(DrawingWindow &window) {
 	CanvasPoint c2 = CanvasPoint(10, 150);
 	CanvasTriangle c = CanvasTriangle(c0, c1, c2);
 
-	textureMapping(window, t, c);
+	std::string filename = "texture.ppm";
+	textureMapping(filename, window, t, c);
 }
 
 void handleEvent(SDL_Event event, DrawingWindow &window) {
@@ -300,7 +335,15 @@ void handleEvent(SDL_Event event, DrawingWindow &window) {
 int main(int argc, char *argv[]) {
 	DrawingWindow window = DrawingWindow(WIDTH, HEIGHT, false);
 	SDL_Event event;
-	draw(window);
+
+	// Wk4 Task02
+	std::string filename = "cornell-box.obj";
+	float scalingFactor = 0.35;
+	std::vector<ModelTriangle> mT = parseObj(filename, scalingFactor);
+	for (ModelTriangle t : mT) { 
+		std::cout << t << std::endl;
+	}
+	// draw(window);
 	// std::vector<float> result;
 	// result = interpolateSingleFloats(2.2, 8.5, 7);
 	// for(size_t i=0; i<result.size(); i++) std::cout << result[i] << " ";
@@ -316,7 +359,7 @@ int main(int argc, char *argv[]) {
 	while (true) {
 		// We MUST poll for events - otherwise the window will freeze !
 		if (window.pollForInputEvents(event)) handleEvent(event, window);
-		// draw(window);
+		draw(window);
 		// Need to render the frame at the end, or nothing actually gets shown on the screen !
 		window.renderFrame();
 	}
