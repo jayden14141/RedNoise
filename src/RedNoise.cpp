@@ -283,6 +283,28 @@ std::vector<ModelTriangle> parseObj (const std::string &filename, std::map<std::
 	return mT;
 }
 
+CanvasPoint getCanvasIntersectionPoint(glm::vec3 cameraPosition, glm::vec3 vertexPosition, float focalLength) {
+	float canvasX = (focalLength * vertexPosition[0] / vertexPosition[2]) + WIDTH / 2;
+	float canvasY = (focalLength * vertexPosition[1] / vertexPosition[2]) + HEIGHT / 2;
+	return CanvasPoint(canvasX, canvasY);
+}
+
+void renderPointCloud(DrawingWindow &window, ModelTriangle mT) {
+	glm::vec3 cameraPosition = glm::vec3(0.0, 0.0, 4.0);
+	float focalLength = 2.0;
+
+	CanvasPoint v0 = getCanvasIntersectionPoint(cameraPosition, mT.vertices[0], focalLength);
+	CanvasPoint v1 = getCanvasIntersectionPoint(cameraPosition, mT.vertices[0], focalLength);
+	CanvasPoint v2 = getCanvasIntersectionPoint(cameraPosition, mT.vertices[0], focalLength);
+	std::vector<CanvasPoint> canvasPoints {v0, v1, v2};
+
+	uint32_t white = (255 << 24) + (255 << 16) + (255 << 8) + 255;
+
+	for (CanvasPoint c : canvasPoints) {
+		window.setPixelColour(c.x, c.y, white);
+	}
+}
+
 void draw(DrawingWindow &window) {
 	// window.clearPixels();
 	// for (size_t y = 0; y < window.height; y++) {
@@ -333,6 +355,7 @@ void draw(DrawingWindow &window) {
 	// line(window, CanvasPoint(window.width/2, 0), CanvasPoint(window.width/2, window.height - 1), c);
 	// line(window, CanvasPoint(window.width/3, window.height/2), CanvasPoint(window.width*2/3, window.height/2), c);
 
+
 	// Wk3 Task06
 	// CanvasPoint t0 = CanvasPoint(195, 5);
 	// CanvasPoint t1 = CanvasPoint(395, 380);
@@ -346,6 +369,18 @@ void draw(DrawingWindow &window) {
 
 	// std::string filename = "texture.ppm";
 	// textureMapping(filename, window, t, c);
+
+
+	// Wk4 Task02, 03
+	std::string mtlFile = "cornell-box.mtl";
+	std::map<std::string, Colour> cMap = parseMtl(mtlFile);
+
+	std::string objFile = "cornell-box.obj";
+	float scalingFactor = 0.35;
+	std::vector<ModelTriangle> mT = parseObj(objFile, cMap, scalingFactor);
+	for (ModelTriangle t : mT) { 
+		renderPointCloud(window, t);
+	}
 }
 
 void handleEvent(SDL_Event event, DrawingWindow &window) {
@@ -365,17 +400,6 @@ void handleEvent(SDL_Event event, DrawingWindow &window) {
 int main(int argc, char *argv[]) {
 	DrawingWindow window = DrawingWindow(WIDTH, HEIGHT, false);
 	SDL_Event event;
-
-	// Wk4 Task02, 03
-	std::string mtlFile = "cornell-box.mtl";
-	std::map<std::string, Colour> cMap = parseMtl(mtlFile);
-
-	std::string objFile = "cornell-box.obj";
-	float scalingFactor = 0.35;
-	std::vector<ModelTriangle> mT = parseObj(objFile, cMap, scalingFactor);
-	for (ModelTriangle t : mT) { 
-		std::cout << t << std::endl;
-	}
 
 	// draw(window);
 	// std::vector<float> result;
