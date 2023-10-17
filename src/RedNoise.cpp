@@ -76,7 +76,7 @@ std::vector<uint32_t> textureColour (TextureMap tm, CanvasPoint from, CanvasPoin
 	std::vector<CanvasPoint> texturePoint = interpolateCanvasPoint(from, to, numberOfValues);
 	std::vector<uint32_t> colour;
 	for (int i = 0; i < numberOfValues; i++) {
-		colour.push_back(tm.pixels[round(texturePoint[i].x + texturePoint[i].y * tm.width)]);
+		colour.push_back(tm.pixels[round(texturePoint[i].x) + round(texturePoint[i].y) * tm.width]);
 	}
 	return colour;
 }
@@ -103,7 +103,7 @@ void fill(DrawingWindow &window, bool bottomFlat, CanvasPoint left, CanvasPoint 
 }
 
 // All the rake rows are passed as v1 and v2
-void fillTexture(DrawingWindow &window, TextureMap tm, bool bottomFlat, CanvasTriangle texture, CanvasTriangle canvas) {
+void fillTexture(DrawingWindow &window, TextureMap tm, CanvasTriangle texture, CanvasTriangle canvas) {
 	int numberOfRow = abs(canvas[0].y - canvas[1].y) + 1;
 
 	std::vector<CanvasPoint> c_left = interpolateCanvasPoint(canvas[0], canvas[1], numberOfRow);
@@ -111,37 +111,13 @@ void fillTexture(DrawingWindow &window, TextureMap tm, bool bottomFlat, CanvasTr
 
 	std::vector<CanvasPoint> t_left = interpolateCanvasPoint(texture[0], texture[1], numberOfRow);
 	std::vector<CanvasPoint> t_right = interpolateCanvasPoint(texture[0], texture[2], numberOfRow);
-	// std::cout << t_left[14] << std::endl;
-	// std::cout << t_right[14] << std::endl;
-	// for (int i = 0; i < t_left.size(); i++) {
-    //         std::cout << t_left[i] << std::endl;
-    // }
-
-	// if(bottomFlat) {
-	// 	for (int i = 0; i < numberOfRow; i++) {
-	// 		int numberOfCol = round(c_right[i].x - c_left[i].x);
-	// 		std::vector<CanvasPoint> rakeRow = interpolateCanvasPoint(c_left[i], c_right[i], numberOfCol);
-	// 		std::vector<uint32_t> colour = textureColour(tm, t_left[i], t_right[i], numberOfCol);
-	// 		for (int j = 0; j < numberOfCol; j++) {
-	// 			window.setPixelColour(round(rakeRow[j].x), round(rakeRow[j].y), colour[j]);
-	// 		}
-	// 	}
-	// } else {
-	// 	for (int i = 0; i < numberOfRow; i++) {
-	// 		int numberOfCol = round(c_right[i].x - c_left[i].x);
-	// 		std::vector<CanvasPoint> rakeRow = interpolateCanvasPoint(c_left[i], c_right[i], numberOfCol);
-	// 		std::vector<uint32_t> colour = textureColour(tm, t_left[i], t_right[i], numberOfCol);
-	// 		for (int j = 0; j < numberOfCol; j++) {
-	// 			window.setPixelColour(round(rakeRow[j].x), round(rakeRow[j].y), colour[j]);
-	// 		}
-	// 	}
-	// }
+	
 	for (int i = 0; i < numberOfRow; i++) {
 			int numberOfCol = round(c_right[i].x - c_left[i].x);
-			std::vector<CanvasPoint> rakeRow = interpolateCanvasPoint(c_left[i], c_right[i], numberOfCol);
 			std::vector<uint32_t> colour = textureColour(tm, t_left[i], t_right[i], numberOfCol);
+			int start = round(c_left[i].x);
 			for (int j = 0; j < numberOfCol; j++) {
-				window.setPixelColour(round(rakeRow[j].x), round(rakeRow[j].y), colour[j]);
+				window.setPixelColour(start++, (c_left[i].y), colour[j]);
 			}
 	}
 }
@@ -237,8 +213,8 @@ void textureMapping(DrawingWindow &window, CanvasTriangle texture, CanvasTriangl
 		tLeft = CanvasPoint(texture[0].x + txDiff * proportion, texture[1].y + tyDiff * proportion);
 	}
 
-	fillTexture(window, tM, true, CanvasTriangle(texture[0], tLeft, tRight), CanvasTriangle(canvas[0], cLeft, cRight));
-	fillTexture(window, tM, false, CanvasTriangle(texture[2], tLeft, tRight), CanvasTriangle(canvas[2], cLeft, cRight));
+	fillTexture(window, tM, CanvasTriangle(texture[0], tLeft, tRight), CanvasTriangle(canvas[0], cLeft, cRight));
+	fillTexture(window, tM, CanvasTriangle(texture[2], tLeft, tRight), CanvasTriangle(canvas[2], cLeft, cRight));
 
 	unfilledTriangle(window, canvas[0], canvas[1], canvas[2], Colour(255, 255, 255));
 }
