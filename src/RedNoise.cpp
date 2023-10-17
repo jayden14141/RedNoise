@@ -3,6 +3,7 @@
 #include <CanvasPoint.h>
 #include <Colour.h>
 #include <DrawingWindow.h>
+#include <map>
 #include <ModelTriangle.h>
 #include <TextureMap.h>
 #include <Utils.h>
@@ -12,41 +13,6 @@
 
 #define WIDTH 320
 #define HEIGHT 240
-
-std::vector<ModelTriangle> parseObj (const std::string &filename, float sF) {
-	std::ifstream inputStream(filename);
-	std::string nextLine;
-	std::vector<glm::vec3> vertices;
-	std::vector<std::vector<int>> facets;
-	std::vector<ModelTriangle> mT;
-
-	// Match the index of obj file
-	vertices.push_back(glm::vec3(0,0,0));
-
-	while(std::getline(inputStream, nextLine)) {
-		if (!nextLine.empty()) {
-			if (nextLine.at(0) == 'v') {
-				std::vector<std::string> s = split(nextLine, ' ');
-				vertices.push_back(glm::vec3(sF * std::stof(s[1]), sF * std::stof(s[2]), sF * std::stof(s[3])));
-			} else if (nextLine.at(0) == 'f') {
-				std::vector<std::string> s = split(nextLine, ' ');
-				std::vector<int> facet;
-				facet.push_back(std::stoi(split(s[1], '/').at(0)));
-				facet.push_back(std::stoi(split(s[2], '/').at(0)));
-				facet.push_back(std::stoi(split(s[3], '/').at(0)));
-				facets.push_back(facet);
-			} else {
-				continue;
-			}
-		}
-	}
-	inputStream.close();
-
-	for (std::vector<int> f : facets) {
-		mT.push_back(ModelTriangle(vertices[f[0]], vertices[f[1]], vertices[f[2]], Colour()));
-	}
-	return mT;
-}
 
 // Interpolation for colour (rgb) => vec3
 std::vector<glm::vec3> interpolateThreeElementValues (glm::vec3 from, glm::vec3 to, int numberOfValues) {
@@ -253,6 +219,70 @@ void textureMapping(const std::string &filename, DrawingWindow &window, CanvasTr
 	unfilledTriangle(window, canvas[0], canvas[1], canvas[2], Colour(255, 255, 255));
 }
 
+std::map<std::string, Colour> parseMtl (const std::string &filename) {
+	std::map<std::string, Colour> colourMap;
+	std::ifstream inputStream(filename);
+	std::string nextLine;
+
+	while(std::getline(inputStream, nextLine)) {
+		if (!nextLine.empty()) {
+			if (nextLine.at(0) == 'n') {
+				std::string c;
+				std::vector<std::string> s = split(nextLine, ' ');
+				c = s[1];
+
+				std::getline(inputStream, nextLine);
+				std::vector<std::string> kd = split(nextLine, ' ');
+				Colour colour = Colour(c, 255 * std::stof(kd[1]), 255 * std::stof(kd[2]), 255 * std::stof(kd[3]));
+				colourMap.insert(std::pair<std::string, Colour>(c, colour));
+			}
+		}
+	}
+	inputStream.close();
+	return colourMap;
+}
+
+std::vector<ModelTriangle> parseObj (const std::string &filename, std::map<std::string, Colour> cMap, float sF) {
+	std::ifstream inputStream(filename);
+	std::string nextLine;
+	std::vector<glm::vec3> vertices;
+	std::vector<std::vector<int>> facets;
+	std::vector<ModelTriangle> mT;
+	Colour currentColour;
+
+	// Match the index of obj file
+	vertices.push_back(glm::vec3(0,0,0));
+
+	while(std::getline(inputStream, nextLine)) {
+		if (!nextLine.empty()) {
+			if (nextLine.at(0) == 'u') {
+				std::vector<std::string> s = split(nextLine, ' ');
+				currentColour = cMap.at(s[1]);
+			}
+			if (nextLine.at(0) == 'v') {
+				std::vector<std::string> s = split(nextLine, ' ');
+				vertices.push_back(glm::vec3(sF * std::stof(s[1]), sF * std::stof(s[2]), sF * std::stof(s[3])));
+			} else if (nextLine.at(0) == 'f') {
+				std::vector<std::string> s = split(nextLine, ' ');
+				std::vector<int> facet;
+				facet.push_back(std::stoi(split(s[1], '/').at(0)));
+				facet.push_back(std::stoi(split(s[2], '/').at(0)));
+				facet.push_back(std::stoi(split(s[3], '/').at(0)));
+				// facets.push_back(facet);
+				mT.push_back(ModelTriangle(vertices[facet[0]], vertices[facet[1]], vertices[facet[2]], currentColour));
+			} else {
+				continue;
+			}
+		}
+	}
+	inputStream.close();
+
+	// for (std::vector<int> f : facets) {
+	// 	mT.push_back(ModelTriangle(vertices[f[0]], vertices[f[1]], vertices[f[2]], Colour()));
+	// }
+	return mT;
+}
+
 void draw(DrawingWindow &window) {
 	// window.clearPixels();
 	// for (size_t y = 0; y < window.height; y++) {
@@ -304,18 +334,18 @@ void draw(DrawingWindow &window) {
 	// line(window, CanvasPoint(window.width/3, window.height/2), CanvasPoint(window.width*2/3, window.height/2), c);
 
 	// Wk3 Task06
-	CanvasPoint t0 = CanvasPoint(195, 5);
-	CanvasPoint t1 = CanvasPoint(395, 380);
-	CanvasPoint t2 = CanvasPoint(65, 330);
-	CanvasTriangle t = CanvasTriangle(t0, t1, t2);
+	// CanvasPoint t0 = CanvasPoint(195, 5);
+	// CanvasPoint t1 = CanvasPoint(395, 380);
+	// CanvasPoint t2 = CanvasPoint(65, 330);
+	// CanvasTriangle t = CanvasTriangle(t0, t1, t2);
 
-	CanvasPoint c0 = CanvasPoint(160, 10);
-	CanvasPoint c1 = CanvasPoint(300, 230);
-	CanvasPoint c2 = CanvasPoint(10, 150);
-	CanvasTriangle c = CanvasTriangle(c0, c1, c2);
+	// CanvasPoint c0 = CanvasPoint(160, 10);
+	// CanvasPoint c1 = CanvasPoint(300, 230);
+	// CanvasPoint c2 = CanvasPoint(10, 150);
+	// CanvasTriangle c = CanvasTriangle(c0, c1, c2);
 
-	std::string filename = "texture.ppm";
-	textureMapping(filename, window, t, c);
+	// std::string filename = "texture.ppm";
+	// textureMapping(filename, window, t, c);
 }
 
 void handleEvent(SDL_Event event, DrawingWindow &window) {
@@ -336,13 +366,17 @@ int main(int argc, char *argv[]) {
 	DrawingWindow window = DrawingWindow(WIDTH, HEIGHT, false);
 	SDL_Event event;
 
-	// Wk4 Task02
-	std::string filename = "cornell-box.obj";
+	// Wk4 Task02, 03
+	std::string mtlFile = "cornell-box.mtl";
+	std::map<std::string, Colour> cMap = parseMtl(mtlFile);
+
+	std::string objFile = "cornell-box.obj";
 	float scalingFactor = 0.35;
-	std::vector<ModelTriangle> mT = parseObj(filename, scalingFactor);
+	std::vector<ModelTriangle> mT = parseObj(objFile, cMap, scalingFactor);
 	for (ModelTriangle t : mT) { 
 		std::cout << t << std::endl;
 	}
+
 	// draw(window);
 	// std::vector<float> result;
 	// result = interpolateSingleFloats(2.2, 8.5, 7);
