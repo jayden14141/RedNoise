@@ -166,9 +166,7 @@ void unfilledTriangle(DrawingWindow &window) {
 	line(window, t.v2(), t.v0(), c);
 }
 
-void unfilledTriangle(DrawingWindow &window, CanvasPoint v0, CanvasPoint v1, CanvasPoint v2, Colour colour) {
-	CanvasTriangle t = CanvasTriangle(v0, v1, v2);
-
+void unfilledTriangle(DrawingWindow &window, CanvasTriangle &t, Colour colour) {
 	line(window, t.v0(), t.v1(), colour);
 	line(window, t.v1(), t.v2(), colour);
 	line(window, t.v2(), t.v0(), colour);
@@ -189,7 +187,16 @@ void filledTriangle(DrawingWindow &window) {
 	fill(window, false, left, right, t[2], c);
 	// line(window, left, right, Colour(255, 255, 255));
 
-	unfilledTriangle(window, v0, v1, v2, Colour(255, 255, 255));
+	unfilledTriangle(window, t, Colour(255, 255, 255));
+}
+
+// Overriding the function that has designated colour & coordinates
+void filledTriangle(DrawingWindow &window, CanvasTriangle &t, Colour c) {
+	CanvasPoint left, right;
+	leftAndRight(t, left, right);
+
+	fill(window, true, left, right, t[0], c);
+	fill(window, false, left, right, t[2], c);
 }
 
 void textureMapping(const std::string &filename, DrawingWindow &window, CanvasTriangle texture, CanvasTriangle canvas) {
@@ -216,7 +223,7 @@ void textureMapping(const std::string &filename, DrawingWindow &window, CanvasTr
 	fillTexture(window, tM, CanvasTriangle(texture[0], tLeft, tRight), CanvasTriangle(canvas[0], cLeft, cRight));
 	fillTexture(window, tM, CanvasTriangle(texture[2], tLeft, tRight), CanvasTriangle(canvas[2], cLeft, cRight));
 
-	unfilledTriangle(window, canvas[0], canvas[1], canvas[2], Colour(255, 255, 255));
+	unfilledTriangle(window, canvas, Colour(255, 255, 255));
 }
 
 std::map<std::string, Colour> parseMtl (const std::string &filename) {
@@ -284,25 +291,32 @@ std::vector<ModelTriangle> parseObj (const std::string &filename, std::map<std::
 }
 
 CanvasPoint getCanvasIntersectionPoint(glm::vec3 cameraPosition, glm::vec3 vertexPosition, float focalLength) {
-	float canvasX = (focalLength * vertexPosition[0] / vertexPosition[2]) + WIDTH / 2;
-	float canvasY = (focalLength * vertexPosition[1] / vertexPosition[2]) + HEIGHT / 2;
+
+	glm::vec3 direction = vertexPosition - cameraPosition;
+
+	float canvasX = HEIGHT * (focalLength * direction[0] / direction[2]) + WIDTH / 2;
+	float canvasY = HEIGHT * (focalLength * direction[1] / direction[2]) + HEIGHT / 2;
+	// std::cout << CanvasPoint(canvasX, canvasY) << std::endl;
 	return CanvasPoint(canvasX, canvasY);
 }
 
 void renderPointCloud(DrawingWindow &window, ModelTriangle mT) {
-	glm::vec3 cameraPosition = glm::vec3(0.0, 0.0, 4.0);
+	glm::vec3 cameraPosition = glm::vec3(0.0, 0.0, 6.0);
 	float focalLength = 2.0;
 
 	CanvasPoint v0 = getCanvasIntersectionPoint(cameraPosition, mT.vertices[0], focalLength);
-	CanvasPoint v1 = getCanvasIntersectionPoint(cameraPosition, mT.vertices[0], focalLength);
-	CanvasPoint v2 = getCanvasIntersectionPoint(cameraPosition, mT.vertices[0], focalLength);
+	CanvasPoint v1 = getCanvasIntersectionPoint(cameraPosition, mT.vertices[1], focalLength);
+	CanvasPoint v2 = getCanvasIntersectionPoint(cameraPosition, mT.vertices[2], focalLength);
 	std::vector<CanvasPoint> canvasPoints {v0, v1, v2};
+	CanvasTriangle cT = CanvasTriangle(v0, v1, v2);
+	// unfilledTriangle(window, cT, Colour(255, 255, 255));
+	filledTriangle(window, cT, mT.colour);
 
-	uint32_t white = (255 << 24) + (255 << 16) + (255 << 8) + 255;
+	// uint32_t white = (255 << 24) + (255 << 16) + (255 << 8) + 255;
 
-	for (CanvasPoint c : canvasPoints) {
-		window.setPixelColour(c.x, c.y, white);
-	}
+	// for (CanvasPoint c : canvasPoints) {
+	// 	window.setPixelColour(c.x, c.y, white);
+	// }
 }
 
 void draw(DrawingWindow &window) {
@@ -378,7 +392,7 @@ void draw(DrawingWindow &window) {
 	std::string objFile = "cornell-box.obj";
 	float scalingFactor = 0.35;
 	std::vector<ModelTriangle> mT = parseObj(objFile, cMap, scalingFactor);
-	for (ModelTriangle t : mT) { 
+	for (ModelTriangle t : mT) {
 		renderPointCloud(window, t);
 	}
 }
