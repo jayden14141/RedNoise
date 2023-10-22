@@ -79,7 +79,7 @@ void line(DrawingWindow &window, CanvasPoint from, CanvasPoint to, Colour c) {
 	}
 }
 
-void line(DrawingWindow &window, CanvasPoint from, CanvasPoint to, Colour c, std::vector<std::vector<float>> depthBuffer) {
+void line(DrawingWindow &window, CanvasPoint from, CanvasPoint to, Colour c, std::vector<std::vector<float>> &depthBuffer) {
 	float xDiff = to.x - from.x;
 	float yDiff = to.y - from.y;
 	float zDiff = to.depth - from.depth;
@@ -133,7 +133,7 @@ void fill(DrawingWindow &window, bool bottomFlat, CanvasPoint left, CanvasPoint 
 
 // Override function having a depth buffer
 void fill(DrawingWindow &window, bool bottomFlat, CanvasPoint left, CanvasPoint right, CanvasPoint p, 
-		Colour c, std::vector<std::vector<float>> depthBuffer) {
+		Colour c, std::vector<std::vector<float>> &depthBuffer) {
 	int numberOfVal = abs(left.y - p.y) + 1;
 	if(bottomFlat) {
 		std::vector<float> v1 = interpolateSingleFloats(p.x, left.x, numberOfVal);
@@ -200,7 +200,7 @@ void leftAndRight(CanvasTriangle &t, CanvasPoint &left, CanvasPoint &right) {
 	float yDiff = t[2].y - t[0].y;
 	float zDiff = t[2].depth - t[0].depth;
 	float alpha = (xDiff * (t[1].y-t[0].y) / yDiff) + t[0].x;
-	float zeta = (zDiff * t[2].depth - t[0].depth / zDiff) + t[0].depth;
+	float zeta = (zDiff * (t[2].depth - t[0].depth) / zDiff) + t[0].depth;
 
 	if (t[1].x < alpha) {
 		left = t[1];
@@ -248,7 +248,7 @@ void filledTriangle(DrawingWindow &window) {
 }
 
 // Overriding the function that has designated colour & coordinates
-void filledTriangle(DrawingWindow &window, CanvasTriangle &t, Colour c, std::vector<std::vector<float>> depthBuffer) {
+void filledTriangle(DrawingWindow &window, CanvasTriangle &t, Colour c, std::vector<std::vector<float>> &depthBuffer) {
 	CanvasPoint left, right;
 	leftAndRight(t, left, right);
 
@@ -347,13 +347,13 @@ std::vector<ModelTriangle> parseObj (const std::string &filename, std::map<std::
 	return mT;
 }
 
-CanvasPoint getCanvasIntersectionPoint(glm::vec3 cameraPosition, glm::vec3 vertexPosition, float focalLength) {
+CanvasPoint getCanvasIntersectionPoint(glm::vec3 &cameraPosition, glm::vec3 &vertexPosition, float focalLength) {
 
 	glm::vec3 direction = vertexPosition - cameraPosition;
 
 	float canvasX = HEIGHT * (focalLength * -direction[0] / direction[2]) + WIDTH / 2;
 	float canvasY = HEIGHT * (focalLength * direction[1] / direction[2]) + HEIGHT / 2;
-	float depth = -1 / direction[2];
+	float depth =  direction[2];
 	return CanvasPoint(canvasX, canvasY, depth);
 }
 
@@ -376,7 +376,7 @@ void renderPointCloud(DrawingWindow &window, std::vector<ModelTriangle> &mT) {
 		CanvasPoint v0 = getCanvasIntersectionPoint(cameraPosition, t.vertices[0], focalLength);
 		CanvasPoint v1 = getCanvasIntersectionPoint(cameraPosition, t.vertices[1], focalLength);
 		CanvasPoint v2 = getCanvasIntersectionPoint(cameraPosition, t.vertices[2], focalLength);
-		std::vector<CanvasPoint> canvasPoints {v0, v1, v2};
+		// std::vector<CanvasPoint> canvasPoints {v0, v1, v2};
 		CanvasTriangle ct = CanvasTriangle(v0, v1, v2);
 		// updateDepthBuffer(canvasPoints, depthBuffer);
 	// 	for (int i = 0; i < depthBuffer.size(); i++) {
