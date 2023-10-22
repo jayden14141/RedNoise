@@ -82,21 +82,20 @@ void line(DrawingWindow &window, CanvasPoint from, CanvasPoint to, Colour c) {
 void line(DrawingWindow &window, CanvasPoint from, CanvasPoint to, Colour c, std::vector<std::vector<float>> depthBuffer) {
 	float xDiff = to.x - from.x;
 	float yDiff = to.y - from.y;
-	float zDiff = 1 / to.depth - 1 / from.depth;
+	float zDiff = to.depth - from.depth;
 	float numberOfSteps = std::max(abs(xDiff), abs(yDiff));
-	numberOfSteps = std::max(numberOfSteps, abs(zDiff));
 	float xStepSize = xDiff / numberOfSteps;
 	float yStepSize = yDiff / numberOfSteps;
 	float zStepSize = zDiff / numberOfSteps;
 	uint32_t colour = (255 << 24) + (c.red << 16) + (c.green << 8) + c.blue;
 
-	for (float i = 0.0; i <= numberOfSteps; i++) {
+	for (float i = 0.0; i < numberOfSteps; i++) {
 		float x = from.x + (xStepSize * i);
 		float y = from.y + (yStepSize * i);
-		float z = 1 / ((1 / from.depth) + zStepSize * i);
-		if (depthBuffer[round(x)][round(y)] <= z) {
+		float z = from.depth + (zStepSize * i);
+		if (depthBuffer[round(x)][round(y)] < - 1 / z) {
 			window.setPixelColour(round(x), round(y), colour);
-			depthBuffer[round(x)][round(y)] = z;
+			depthBuffer[round(x)][round(y)] = -  1 / z;
 		}
 	}
 }
@@ -139,21 +138,21 @@ void fill(DrawingWindow &window, bool bottomFlat, CanvasPoint left, CanvasPoint 
 	if(bottomFlat) {
 		std::vector<float> v1 = interpolateSingleFloats(p.x, left.x, numberOfVal);
 		std::vector<float> v2 = interpolateSingleFloats(p.x, right.x, numberOfVal);
-		std::vector<float> v1_z = interpolateSingleFloats(1 / p.depth, 1 / left.depth, numberOfVal);
-		std::vector<float> v2_z = interpolateSingleFloats(1 / p.depth, 1 / right.depth, numberOfVal);
+		std::vector<float> v1_z = interpolateSingleFloats(p.depth, left.depth, numberOfVal);
+		std::vector<float> v2_z = interpolateSingleFloats(p.depth, right.depth, numberOfVal);
 		int i = 0;
 		for(float y = p.y; y < left.y; y++) {
-			line(window, CanvasPoint(v1[i], y, 1 / v1_z[i]), CanvasPoint(v2[i], y, 1 / v2_z[i]), c);
+			line(window, CanvasPoint(v1[i], y, v1_z[i]), CanvasPoint(v2[i], y, v2_z[i]), c, depthBuffer);
 			i++;
 		}
 	} else {
 		std::vector<float> v1 = interpolateSingleFloats(left.x, p.x, numberOfVal);
 		std::vector<float> v2 = interpolateSingleFloats(right.x, p.x, numberOfVal);
-		std::vector<float> v1_z = interpolateSingleFloats(1 / p.depth, 1 / left.depth, numberOfVal);
-		std::vector<float> v2_z = interpolateSingleFloats(1 / p.depth, 1 / right.depth, numberOfVal);
+		std::vector<float> v1_z = interpolateSingleFloats(left.depth, p.depth, numberOfVal);
+		std::vector<float> v2_z = interpolateSingleFloats(right.depth, p.depth, numberOfVal);
 		int i = 0;
 		for(float y = left.y; y < p.y; y++) {
-			line(window, CanvasPoint(v1[i], y, 1 / v1_z[i]), CanvasPoint(v2[i], y, 1 / v2_z[i]), c);
+			line(window, CanvasPoint(v1[i], y, v1_z[i]), CanvasPoint(v2[i], y, v2_z[i]), c, depthBuffer);
 			i++;
 		}
 	}
@@ -199,13 +198,15 @@ void leftAndRight(CanvasTriangle &t, CanvasPoint &left, CanvasPoint &right) {
 	// alpha = (xDiff * (y1-y0) / yDiff) + x0
 	float xDiff = t[2].x - t[0].x;
 	float yDiff = t[2].y - t[0].y;
+	float zDiff = t[2].depth - t[0].depth;
 	float alpha = (xDiff * (t[1].y-t[0].y) / yDiff) + t[0].x;
+	float zeta = (zDiff * t[2].depth - t[0].depth / zDiff) + t[0].depth;
 
 	if (t[1].x < alpha) {
 		left = t[1];
-		right = CanvasPoint(alpha, t[1].y);
+		right = CanvasPoint(alpha, t[1].y, zeta);
 	} else {
-		left = CanvasPoint(alpha, t[1].y);
+		left = CanvasPoint(alpha, t[1].y, zeta);
 		right = t[1];
 	}
 }
@@ -350,36 +351,34 @@ CanvasPoint getCanvasIntersectionPoint(glm::vec3 cameraPosition, glm::vec3 verte
 
 	glm::vec3 direction = vertexPosition - cameraPosition;
 
-	float canvasX = HEIGHT * (focalLength * direction[0] / direction[2]) + WIDTH / 2;
+	float canvasX = HEIGHT * (focalLength * -direction[0] / direction[2]) + WIDTH / 2;
 	float canvasY = HEIGHT * (focalLength * direction[1] / direction[2]) + HEIGHT / 2;
-	if (direction[2] == 0) std::cout << "Yes" << std::endl;
 	float depth = -1 / direction[2];
 	return CanvasPoint(canvasX, canvasY, depth);
 }
 
 // Interpolate based on 2D coordinates (not glm::vec3)
 // depthBuffer stores the depth that has the biggest value (closest to the screen)
-void updateDepthBuffer(std::vector<CanvasPoint> &cP, std::vector<std::vector<float>> &depthBuffer) {
-	for (CanvasPoint p : cP) {
-		if (depthBuffer[p.x][p.y] < p.depth) {
-			depthBuffer[p.x][p.y] = p.depth;
-		}
-	}
-}
+// void updateDepthBuffer(std::vector<CanvasPoint> &cP, std::vector<std::vector<float>> &depthBuffer) {
+// 	for (CanvasPoint p : cP) {
+// 		if (depthBuffer[p.x][p.y] < p.depth) {
+// 			depthBuffer[p.x][p.y] = p.depth;
+// 		}
+// 	}
+// }
 
 void renderPointCloud(DrawingWindow &window, std::vector<ModelTriangle> &mT) {
 	glm::vec3 cameraPosition = glm::vec3(0.0, 0.0, 6.0);
 	float focalLength = 2.0;
 
-	std::vector<std::vector<float>> depthBuffer(WIDTH, std::vector<float>(HEIGHT, 0));
-
+	std::vector<std::vector<float>> depthBuffer(WIDTH, std::vector<float>(HEIGHT, -(std::numeric_limits<float>::infinity())));
 	for (ModelTriangle t : mT) {
 		CanvasPoint v0 = getCanvasIntersectionPoint(cameraPosition, t.vertices[0], focalLength);
 		CanvasPoint v1 = getCanvasIntersectionPoint(cameraPosition, t.vertices[1], focalLength);
 		CanvasPoint v2 = getCanvasIntersectionPoint(cameraPosition, t.vertices[2], focalLength);
 		std::vector<CanvasPoint> canvasPoints {v0, v1, v2};
 		CanvasTriangle ct = CanvasTriangle(v0, v1, v2);
-		updateDepthBuffer(canvasPoints, depthBuffer);
+		// updateDepthBuffer(canvasPoints, depthBuffer);
 	// 	for (int i = 0; i < depthBuffer.size(); i++) {
 	// 		for (int j = 0; j < depthBuffer[i].size(); j++) {
 	// 			if (depthBuffer[i][j] != 0) {
