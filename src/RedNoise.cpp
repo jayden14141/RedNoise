@@ -10,9 +10,11 @@
 #include <fstream>
 #include <vector>
 #include <glm/glm.hpp>
+#include <cmath>
 
 #define WIDTH 320
 #define HEIGHT 240
+#define PI 3.14159265358979323846
 
 std::map<std::string, Colour> colourMap;
 std::vector<ModelTriangle> modelTriangles;
@@ -100,9 +102,15 @@ void line(DrawingWindow &window, CanvasPoint from, CanvasPoint to, Colour c, std
 		float x = from.x + (xStepSize * i);
 		float y = from.y + (yStepSize * i);
 		float z = from.depth + (zStepSize * i);
-		if (depthBuffer[round(x)][round(y)] > 1.0 / z) {
+
+		int x_int = round(x);
+		int y_int = round(y);
+
+		if (x_int >= 0 && x_int < WIDTH && y_int >= 0 && y_int < HEIGHT) {
+			if (depthBuffer[round(x)][round(y)] > 1.0 / z) {
 			window.setPixelColour(round(x), round(y), colour);
 			depthBuffer[round(x)][round(y)] = 1.0 / z;
+			}
 		}
 	}
 }
@@ -374,7 +382,7 @@ CanvasPoint getCanvasIntersectionPoint(glm::vec3 &cameraPosition, glm::vec3 &ver
 // 	}
 // }
 
-void renderPointCloud(DrawingWindow &window, glm::vec3 cameraPosition, float focalLength) {
+void renderPointCloud(DrawingWindow &window, float focalLength) {
 
 	std::vector<std::vector<float>> depthBuffer(WIDTH, std::vector<float>(HEIGHT, 0));
 	for (ModelTriangle t : modelTriangles) {
@@ -394,11 +402,11 @@ void parseFiles(const std::string &objFile, const std::string &mtlFile, float sc
 }
 
 void drawFile(DrawingWindow &window) {
-	renderPointCloud(window, cameraPosition, focalLength);
+	renderPointCloud(window, focalLength);
 }
 
 void draw(DrawingWindow &window) {
-	// window.clearPixels();
+	window.clearPixels();
 	// for (size_t y = 0; y < window.height; y++) {
 	// 	for (size_t x = 0; x < window.width; x++) {
 	// 		float red = rand() % 256;
@@ -468,12 +476,60 @@ void draw(DrawingWindow &window) {
 
 }
 
+void rotate_camera(bool x_axis, float degree) {
+	glm::mat3 m;
+	if (x_axis) {
+		m = glm::mat3(
+   			1, 0, 0,
+   			0, cos(degree), sin(degree),
+   			0, -sin(degree), cos(degree));
+	} else {
+		m = glm::mat3(
+   			cos(degree), 0, -sin(degree),
+  			0, 1, 0,
+   			sin(degree), 0, cos(degree));
+	}
+	cameraPosition = cameraPosition * m;
+}
+
+void translate_camera(int where, bool positive) {
+
+	//translate by x
+	if (where == 0) {
+		if (positive) {
+			cameraPosition += glm::vec3(0.2, 0, 0);
+		} else {
+			cameraPosition -= glm::vec3(0.2, 0, 0);
+		}
+	//translate by y
+	} else if (where == 1) {
+		if (positive) {
+			cameraPosition += glm::vec3(0, 0.2, 0);
+		} else {
+			cameraPosition -= glm::vec3(0, 0.2, 0);
+		}
+	//translate by z
+	} else {
+		if (positive) {
+			cameraPosition += glm::vec3(0, 0, 0.2);
+		} else {
+			cameraPosition -= glm::vec3(0, 0, 0.2);
+		}
+	}
+}
+
 void handleEvent(SDL_Event event, DrawingWindow &window) {
 	if (event.type == SDL_KEYDOWN) {
-		if (event.key.keysym.sym == SDLK_LEFT) std::cout << "LEFT" << std::endl;
-		else if (event.key.keysym.sym == SDLK_RIGHT) std::cout << "RIGHT" << std::endl;
-		else if (event.key.keysym.sym == SDLK_UP) std::cout << "UP" << std::endl;
-		else if (event.key.keysym.sym == SDLK_DOWN) std::cout << "DOWN" << std::endl;
+		if (event.key.keysym.sym == SDLK_LEFT) rotate_camera(false, -PI / 2);
+		else if (event.key.keysym.sym == SDLK_RIGHT) rotate_camera(false, PI / 2);
+		else if (event.key.keysym.sym == SDLK_UP) rotate_camera(true, -PI / 2);
+		else if (event.key.keysym.sym == SDLK_DOWN) rotate_camera(true, PI / 2);
+		else if (event.key.keysym.sym == SDLK_w) translate_camera(1, false);
+		else if (event.key.keysym.sym == SDLK_a) translate_camera(0, true);
+		else if (event.key.keysym.sym == SDLK_s) translate_camera(1, true);
+		else if (event.key.keysym.sym == SDLK_d) translate_camera(0, false);
+		else if (event.key.keysym.sym == SDLK_q) translate_camera(2, true);
+		else if (event.key.keysym.sym == SDLK_e) translate_camera(2, false);
 		else if (event.key.keysym.sym == SDLK_u) unfilledTriangle(window);
 		else if (event.key.keysym.sym == SDLK_f) filledTriangle(window);
 	} else if (event.type == SDL_MOUSEBUTTONDOWN) {
