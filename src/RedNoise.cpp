@@ -14,6 +14,11 @@
 #define WIDTH 320
 #define HEIGHT 240
 
+std::map<std::string, Colour> colourMap;
+std::vector<ModelTriangle> modelTriangles;
+glm::vec3 cameraPosition = glm::vec3(0.0, 0.0, 6.0);
+float focalLength = 2.0;
+
 // Interpolation for colour (rgb) => vec3
 std::vector<glm::vec3> interpolateThreeElementValues (glm::vec3 from, glm::vec3 to, int numberOfValues) {
 	std::vector<glm::vec3> v;
@@ -202,7 +207,7 @@ void leftAndRight(CanvasTriangle &t, CanvasPoint &left, CanvasPoint &right) {
 	float yDiff = t[2].y - t[0].y;
 	float zDiff = t[2].depth - t[0].depth;
 	float alpha = (xDiff * (t[1].y-t[0].y) / yDiff) + t[0].x;
-	float zeta = abs(zDiff * (t[1].depth - t[0].depth) / zDiff) + t[0].depth;
+	float zeta = (zDiff * (t[1].depth - t[0].depth) / zDiff) + t[0].depth;
 
 	if (t[1].x < alpha) {
 		left = t[1];
@@ -369,43 +374,27 @@ CanvasPoint getCanvasIntersectionPoint(glm::vec3 &cameraPosition, glm::vec3 &ver
 // 	}
 // }
 
-void renderPointCloud(DrawingWindow &window, std::vector<ModelTriangle> &mT) {
-	glm::vec3 cameraPosition = glm::vec3(0.0, 0.0, 6.0);
-	float focalLength = 2.0;
+void renderPointCloud(DrawingWindow &window, glm::vec3 cameraPosition, float focalLength) {
 
 	std::vector<std::vector<float>> depthBuffer(WIDTH, std::vector<float>(HEIGHT, 0));
-	for (ModelTriangle t : mT) {
+	for (ModelTriangle t : modelTriangles) {
 		CanvasPoint v0 = getCanvasIntersectionPoint(cameraPosition, t.vertices[0], focalLength);
 		CanvasPoint v1 = getCanvasIntersectionPoint(cameraPosition, t.vertices[1], focalLength);
 		CanvasPoint v2 = getCanvasIntersectionPoint(cameraPosition, t.vertices[2], focalLength);
-		// std::vector<CanvasPoint> canvasPoints {v0, v1, v2};
 		CanvasTriangle ct = CanvasTriangle(v0, v1, v2);
-		// updateDepthBuffer(canvasPoints, depthBuffer);
-	// 	for (int i = 0; i < depthBuffer.size(); i++) {
-	// 		for (int j = 0; j < depthBuffer[i].size(); j++) {
-	// 			if (depthBuffer[i][j] != 0) {
-	// 				std::cout << i << "and:  " << j << ", ::  "<< depthBuffer[i][j] << "\n";
-	// 			}
-	// 		}
-	// }
-		// std::string a("Green");
-		// std::string b("Red");
-		// if (a.compare(t.colour.name) == 0 || b.compare(t.colour.name) == 0) {
-		// 	if (b.compare(t.colour.name) == 0) {
-		// 		 std::cout << "RED : " << ct << std::endl;
-		// 	} else {
-		// 		 std::cout << "GREEN : " << ct << std::endl;
-		// 	}
-		// }
+		
 		filledTriangle(window, ct, t.colour, depthBuffer);
 		// unfilledTriangle(window, ct, Colour(255, 255, 255));
 	}
 }
 
-void drawObj(DrawingWindow &window, const std::string &objFile, const std::string &mtlFile, float scalingFactor) {
-	std::map<std::string, Colour> cMap = parseMtl(mtlFile);
-	std::vector<ModelTriangle> mT = parseObj(objFile, cMap, scalingFactor);
-	renderPointCloud(window, mT);
+void parseFiles(const std::string &objFile, const std::string &mtlFile, float scalingFactor) {
+	colourMap = parseMtl(mtlFile);
+	modelTriangles = parseObj(objFile, colourMap, scalingFactor);
+}
+
+void drawFile(DrawingWindow &window) {
+	renderPointCloud(window, cameraPosition, focalLength);
 }
 
 void draw(DrawingWindow &window) {
@@ -475,22 +464,8 @@ void draw(DrawingWindow &window) {
 
 
 	// Wk4 Task02, 03
-	std::string objFile = "cornell-box.obj";
-	std::string mtlFile = "cornell-box.mtl";
-	float scalingFactor = 0.35;
-	drawObj(window, objFile, mtlFile, scalingFactor);
+	drawFile(window);
 
-
-	// glm::vec3 cameraPosition = glm::vec3(0.0, 0.0, 6.0);
-	// float focalLength = 2.0;
-	// for (ModelTriangle t : mT) {
-	// 	CanvasPoint v0 = getCanvasIntersectionPoint(cameraPosition, t.vertices[0], focalLength);
-	// 	CanvasPoint v1 = getCanvasIntersectionPoint(cameraPosition, t.vertices[1], focalLength);
-	// 	CanvasPoint v2 = getCanvasIntersectionPoint(cameraPosition, t.vertices[2], focalLength);
-	// 	// std::vector<CanvasPoint> canvasPoints {v0, v1, v2};
-	// 	CanvasTriangle ct = CanvasTriangle(v0, v1, v2);
-	// 	unfilledTriangle(window, ct, Colour(255, 255, 255));
-	// }
 }
 
 void handleEvent(SDL_Event event, DrawingWindow &window) {
@@ -510,8 +485,11 @@ void handleEvent(SDL_Event event, DrawingWindow &window) {
 int main(int argc, char *argv[]) {
 	DrawingWindow window = DrawingWindow(WIDTH, HEIGHT, false);
 	SDL_Event event;
+	std::string objFile = "cornell-box.obj";
+	std::string mtlFile = "cornell-box.mtl";
+	parseFiles(objFile, mtlFile, 0.35);
 
-	draw(window);
+	// draw(window);
 	// std::vector<float> result;
 	// result = interpolateSingleFloats(2.2, 8.5, 7);
 	// for(size_t i=0; i<result.size(); i++) std::cout << result[i] << " ";
@@ -527,7 +505,7 @@ int main(int argc, char *argv[]) {
 	while (true) {
 		// We MUST poll for events - otherwise the window will freeze !
 		if (window.pollForInputEvents(event)) handleEvent(event, window);
-		// draw(window);
+		draw(window);
 		// Need to render the frame at the end, or nothing actually gets shown on the screen !
 		window.renderFrame();
 	}
