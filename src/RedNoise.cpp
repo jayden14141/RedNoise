@@ -20,6 +20,8 @@ std::map<std::string, Colour> colourMap;
 std::vector<ModelTriangle> modelTriangles;
 glm::vec3 cameraPosition = glm::vec3(0.0, 0.0, 6.0);
 float focalLength = 2.0;
+glm::mat3 cameraOrientation = glm::mat3(1.0);
+bool orbits = false;
 
 // Interpolation for colour (rgb) => vec3
 std::vector<glm::vec3> interpolateThreeElementValues (glm::vec3 from, glm::vec3 to, int numberOfValues) {
@@ -365,6 +367,7 @@ std::vector<ModelTriangle> parseObj (const std::string &filename, std::map<std::
 CanvasPoint getCanvasIntersectionPoint(glm::vec3 &cameraPosition, glm::vec3 &vertexPosition, float focalLength) {
 
 	glm::vec3 direction = vertexPosition - cameraPosition;
+	direction = direction * cameraOrientation;
 
 	float canvasX = HEIGHT * (focalLength * -direction[0] / direction[2]) + WIDTH / 2;
 	float canvasY = HEIGHT * (focalLength * direction[1] / direction[2]) + HEIGHT / 2;
@@ -401,7 +404,72 @@ void parseFiles(const std::string &objFile, const std::string &mtlFile, float sc
 	modelTriangles = parseObj(objFile, colourMap, scalingFactor);
 }
 
+void change_orientation(bool x_axis, float degree) {
+	glm::mat3 m;
+	if (x_axis) {
+		m = glm::mat3(
+   			1, 0, 0,
+   			0, cos(degree), sin(degree),
+   			0, -sin(degree), cos(degree));
+	} else {
+		m = glm::mat3(
+   			cos(degree), 0, -sin(degree),
+  			0, 1, 0,
+   			sin(degree), 0, cos(degree));
+	}
+	cameraOrientation = cameraOrientation * m;
+}
+
+void rotate_camera(bool x_axis, float degree) {
+	glm::mat3 m;
+	if (x_axis) {
+		m = glm::mat3(
+   			1, 0, 0,
+   			0, cos(degree), sin(degree),
+   			0, -sin(degree), cos(degree));
+	} else {
+		m = glm::mat3(
+   			cos(degree), 0, -sin(degree),
+  			0, 1, 0,
+   			sin(degree), 0, cos(degree));
+	}
+	cameraPosition = cameraPosition * m;
+}
+
+void translate_camera(int where, bool positive) {
+
+	//translate by x
+	if (where == 0) {
+		if (positive) {
+			cameraPosition += glm::vec3(0.2, 0, 0);
+		} else {
+			cameraPosition -= glm::vec3(0.2, 0, 0);
+		}
+	//translate by y
+	} else if (where == 1) {
+		if (positive) {
+			cameraPosition += glm::vec3(0, 0.2, 0);
+		} else {
+			cameraPosition -= glm::vec3(0, 0.2, 0);
+		}
+	//translate by z
+	} else {
+		if (positive) {
+			cameraPosition += glm::vec3(0, 0, 0.2);
+		} else {
+			cameraPosition -= glm::vec3(0, 0, 0.2);
+		}
+	}
+}
+
+void orbit() {
+	if (orbits) {
+		rotate_camera(false, -PI / 16);
+	}
+}
+
 void drawFile(DrawingWindow &window) {
+	orbit();
 	renderPointCloud(window, focalLength);
 }
 
@@ -475,61 +543,23 @@ void draw(DrawingWindow &window) {
 	drawFile(window);
 
 }
-
-void rotate_camera(bool x_axis, float degree) {
-	glm::mat3 m;
-	if (x_axis) {
-		m = glm::mat3(
-   			1, 0, 0,
-   			0, cos(degree), sin(degree),
-   			0, -sin(degree), cos(degree));
-	} else {
-		m = glm::mat3(
-   			cos(degree), 0, -sin(degree),
-  			0, 1, 0,
-   			sin(degree), 0, cos(degree));
-	}
-	cameraPosition = cameraPosition * m;
-}
-
-void translate_camera(int where, bool positive) {
-
-	//translate by x
-	if (where == 0) {
-		if (positive) {
-			cameraPosition += glm::vec3(0.2, 0, 0);
-		} else {
-			cameraPosition -= glm::vec3(0.2, 0, 0);
-		}
-	//translate by y
-	} else if (where == 1) {
-		if (positive) {
-			cameraPosition += glm::vec3(0, 0.2, 0);
-		} else {
-			cameraPosition -= glm::vec3(0, 0.2, 0);
-		}
-	//translate by z
-	} else {
-		if (positive) {
-			cameraPosition += glm::vec3(0, 0, 0.2);
-		} else {
-			cameraPosition -= glm::vec3(0, 0, 0.2);
-		}
-	}
-}
-
 void handleEvent(SDL_Event event, DrawingWindow &window) {
 	if (event.type == SDL_KEYDOWN) {
-		if (event.key.keysym.sym == SDLK_LEFT) rotate_camera(false, -PI / 2);
-		else if (event.key.keysym.sym == SDLK_RIGHT) rotate_camera(false, PI / 2);
-		else if (event.key.keysym.sym == SDLK_UP) rotate_camera(true, -PI / 2);
-		else if (event.key.keysym.sym == SDLK_DOWN) rotate_camera(true, PI / 2);
-		else if (event.key.keysym.sym == SDLK_w) translate_camera(1, false);
-		else if (event.key.keysym.sym == SDLK_a) translate_camera(0, true);
-		else if (event.key.keysym.sym == SDLK_s) translate_camera(1, true);
-		else if (event.key.keysym.sym == SDLK_d) translate_camera(0, false);
+		if (event.key.keysym.sym == SDLK_1) rotate_camera(false, -PI / 16);
+		else if (event.key.keysym.sym == SDLK_2) rotate_camera(false, PI / 16);
+		else if (event.key.keysym.sym == SDLK_3) rotate_camera(true, -PI / 16);
+		else if (event.key.keysym.sym == SDLK_4) rotate_camera(true, PI / 16);
+		else if (event.key.keysym.sym == SDLK_w) translate_camera(1, true);
+		else if (event.key.keysym.sym == SDLK_a) translate_camera(0, false);
+		else if (event.key.keysym.sym == SDLK_s) translate_camera(1, false);
+		else if (event.key.keysym.sym == SDLK_d) translate_camera(0, true);
 		else if (event.key.keysym.sym == SDLK_q) translate_camera(2, true);
 		else if (event.key.keysym.sym == SDLK_e) translate_camera(2, false);
+		else if (event.key.keysym.sym == SDLK_LEFT) change_orientation(false, -PI / 16);
+		else if (event.key.keysym.sym == SDLK_RIGHT) change_orientation(false, PI / 16);
+		else if (event.key.keysym.sym == SDLK_UP) change_orientation(true, -PI / 16);
+		else if (event.key.keysym.sym == SDLK_DOWN) change_orientation(true, PI / 16);
+		else if (event.key.keysym.sym == SDLK_o) orbits = !orbits;
 		else if (event.key.keysym.sym == SDLK_u) unfilledTriangle(window);
 		else if (event.key.keysym.sym == SDLK_f) filledTriangle(window);
 	} else if (event.type == SDL_MOUSEBUTTONDOWN) {
