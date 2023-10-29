@@ -462,15 +462,26 @@ void translate_camera(int where, bool positive) {
 	}
 }
 
+void lookAt() {
+	glm::vec3 forward = glm::normalize(cameraPosition);
+	glm::vec3 right = glm::normalize(glm::cross(glm::vec3(0,1,0), forward));
+	glm::vec3 up = glm::normalize(glm::cross(forward, right));
+
+	cameraOrientation[0] = right;
+	cameraOrientation[1] = up;
+	cameraOrientation[2] = forward;
+}
+
 void orbit() {
 	if (orbits) {
-		rotate_camera(false, -PI / 16);
+		rotate_camera(false, -PI / 160);
+		lookAt();
 	}
 }
 
 void drawFile(DrawingWindow &window) {
-	orbit();
 	renderPointCloud(window, focalLength);
+	orbit();
 }
 
 void draw(DrawingWindow &window) {
