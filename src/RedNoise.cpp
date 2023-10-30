@@ -6,6 +6,7 @@
 #include <map>
 #include <ModelTriangle.h>
 #include <TextureMap.h>
+#include <RayTriangleIntersection.h>
 #include <Utils.h>
 #include <fstream>
 #include <vector>
@@ -110,7 +111,7 @@ void line(DrawingWindow &window, CanvasPoint from, CanvasPoint to, Colour c, std
 		int y_int = round(y);
 
 		if (x_int >= 0 && x_int < WIDTH && y_int >= 0 && y_int < HEIGHT) {
-			if (depthBuffer[round(x)][round(y)] < 1.0 / z) {
+			if (depthBuffer[round(x)][round(y)] <= 1.0 / z) {
 			window.setPixelColour(round(x), round(y), colour);
 			depthBuffer[round(x)][round(y)] = 1.0 / z;
 			}
@@ -380,6 +381,28 @@ CanvasPoint getCanvasIntersectionPoint(glm::vec3 &cameraPosition, glm::vec3 &ver
 	return CanvasPoint(canvasX, canvasY, depth);
 }
 
+RayTriangleIntersection getClosestIntersection (std::vector<ModelTriangles> &modelTriangles, glm::vec3 rayDirection) {
+	RayTriangleIntersection rti;
+
+	for (ModelTriangle mT : modelTriangles) {
+		glm::vec3 e0 = mT.vertices[1] - mT.vertices[0];
+		glm::vec3 e1 = mT.vertices[2] - mT.vertices[0];
+		glm::vec3 spVector = cameraPosition - mT.vertices[0];
+		glm::mat3 deMatrix(-rayDirection, e0, e1);
+		glm::vec3 possibleSol = glm::inverse(deMatrix) * spVector;
+		float t = possibleSol[0];
+		float u = possibleSol[1];
+		float v = possibleSol[2];
+		glm::vec3 intersection = mT.vertices[0] + u * (mT.vertices[1] - mT.vertices[0]) + v*(mT.vertices[2]- mT.vertices[0]);
+
+		if (rti.distanceFromCamera > t) {
+			rti.distanceFromCamera = t;
+			rti.intersectedTriangle = mT;
+			rti.intersectionPoint = intersection;
+		}
+	}
+	return rti;
+}
 
 void renderPointCloud(DrawingWindow &window, float focalLength) {
 
