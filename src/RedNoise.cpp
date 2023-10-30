@@ -93,6 +93,7 @@ void line(DrawingWindow &window, CanvasPoint from, CanvasPoint to, Colour c, std
 	float yDiff = to.y - from.y;
 	float zDiff = to.depth - from.depth;
 	float numberOfSteps = std::max(abs(xDiff), abs(yDiff));
+	numberOfSteps = std::max(numberOfSteps, zDiff);
 	float xStepSize = xDiff / numberOfSteps;
 	float yStepSize = yDiff / numberOfSteps;
 	float zStepSize = zDiff / numberOfSteps;
@@ -109,7 +110,7 @@ void line(DrawingWindow &window, CanvasPoint from, CanvasPoint to, Colour c, std
 		int y_int = round(y);
 
 		if (x_int >= 0 && x_int < WIDTH && y_int >= 0 && y_int < HEIGHT) {
-			if (depthBuffer[round(x)][round(y)] > 1.0 / z) {
+			if (depthBuffer[round(x)][round(y)] < 1.0 / z) {
 			window.setPixelColour(round(x), round(y), colour);
 			depthBuffer[round(x)][round(y)] = 1.0 / z;
 			}
@@ -213,11 +214,14 @@ void leftAndRight(CanvasTriangle &t, CanvasPoint &left, CanvasPoint &right) {
 	sort(true, t);
 	// yDiff : xDiff = y1 - y0: alpha - x0
 	// alpha = (xDiff * (y1-y0) / yDiff) + x0
+	// alpha = xDiff * proportion + x0         (proportion = (y1-y0) / yDiff)
+	// zeta = zDiff * proportion + z0
 	float xDiff = t[2].x - t[0].x;
 	float yDiff = t[2].y - t[0].y;
 	float zDiff = t[2].depth - t[0].depth;
-	float alpha = (xDiff * (t[1].y-t[0].y) / yDiff) + t[0].x;
-	float zeta = (zDiff * (t[1].depth - t[0].depth) / zDiff) + t[0].depth;
+	float proportion = (t[1].y-t[0].y) / yDiff;
+	float alpha = (xDiff * proportion) + t[0].x;
+	float zeta = (zDiff * proportion) + t[0].depth;
 
 	if (t[1].x < alpha) {
 		left = t[1];
@@ -297,7 +301,7 @@ void textureMapping(const std::string &filename, DrawingWindow &window, CanvasTr
 	fillTexture(window, tM, CanvasTriangle(texture[0], tLeft, tRight), CanvasTriangle(canvas[0], cLeft, cRight));
 	fillTexture(window, tM, CanvasTriangle(texture[2], tLeft, tRight), CanvasTriangle(canvas[2], cLeft, cRight));
 
-	unfilledTriangle(window, canvas, Colour(255, 255, 255));
+	// unfilledTriangle(window, canvas, Colour(255, 255, 255));
 }
 
 std::map<std::string, Colour> parseMtl (const std::string &filename) {
@@ -371,19 +375,11 @@ CanvasPoint getCanvasIntersectionPoint(glm::vec3 &cameraPosition, glm::vec3 &ver
 
 	float canvasX = HEIGHT * (focalLength * -direction[0] / direction[2]) + WIDTH / 2;
 	float canvasY = HEIGHT * (focalLength * direction[1] / direction[2]) + HEIGHT / 2;
-	float depth =  direction[2];
+	float depth =  -direction[2];
+	// std::cout << depth << std::endl;
 	return CanvasPoint(canvasX, canvasY, depth);
 }
 
-// Interpolate based on 2D coordinates (not glm::vec3)
-// depthBuffer stores the depth that has the biggest value (closest to the screen)
-// void updateDepthBuffer(std::vector<CanvasPoint> &cP, std::vector<std::vector<float>> &depthBuffer) {
-// 	for (CanvasPoint p : cP) {
-// 		if (depthBuffer[p.x][p.y] < p.depth) {
-// 			depthBuffer[p.x][p.y] = p.depth;
-// 		}
-// 	}
-// }
 
 void renderPointCloud(DrawingWindow &window, float focalLength) {
 
@@ -474,7 +470,7 @@ void lookAt() {
 
 void orbit() {
 	if (orbits) {
-		rotate_camera(false, -PI / 160);
+		rotate_camera(false, -PI / 400);
 		lookAt();
 	}
 }
@@ -571,6 +567,7 @@ void handleEvent(SDL_Event event, DrawingWindow &window) {
 		else if (event.key.keysym.sym == SDLK_UP) change_orientation(true, -PI / 16);
 		else if (event.key.keysym.sym == SDLK_DOWN) change_orientation(true, PI / 16);
 		else if (event.key.keysym.sym == SDLK_o) orbits = !orbits;
+		else if (event.key.keysym.sym == SDLK_l) lookAt();
 		else if (event.key.keysym.sym == SDLK_u) unfilledTriangle(window);
 		else if (event.key.keysym.sym == SDLK_f) filledTriangle(window);
 	} else if (event.type == SDL_MOUSEBUTTONDOWN) {
