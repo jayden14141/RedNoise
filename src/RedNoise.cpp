@@ -381,8 +381,19 @@ CanvasPoint getCanvasIntersectionPoint(glm::vec3 &cameraPosition, glm::vec3 &ver
 	return CanvasPoint(canvasX, canvasY, depth);
 }
 
-RayTriangleIntersection getClosestIntersection (std::vector<ModelTriangles> &modelTriangles, glm::vec3 rayDirection) {
+
+glm::vec3 getDirectionVector(CanvasPoint canvasPosition) {
+	float dZ = -1 * canvasPosition.depth;
+	float dX = -dZ * (canvasPosition.x - WIDTH / 2) / (HEIGHT * focalLength);
+	float dY = dZ * (canvasPosition.y - HEIGHT / 2) / (HEIGHT * focalLength);
+	// glm::vec3 rayDirection = glm::normalize(glm::vec3(dX, dY, dZ) + cameraPosition);
+	// std::cout << rayDirection[0] << ", " << rayDirection[1] << ", " << rayDirection[2] << std::endl;
+	return glm::normalize(glm::vec3(dX, dY, dZ));
+}
+
+RayTriangleIntersection getClosestIntersection (glm::vec3 rayDirection) {
 	RayTriangleIntersection rti;
+	rti.distanceFromCamera = std::numeric_limits<float>::infinity();
 
 	for (ModelTriangle mT : modelTriangles) {
 		glm::vec3 e0 = mT.vertices[1] - mT.vertices[0];
@@ -395,16 +406,20 @@ RayTriangleIntersection getClosestIntersection (std::vector<ModelTriangles> &mod
 		float v = possibleSol[2];
 		glm::vec3 intersection = mT.vertices[0] + u * (mT.vertices[1] - mT.vertices[0]) + v*(mT.vertices[2]- mT.vertices[0]);
 
-		if (rti.distanceFromCamera > t) {
-			rti.distanceFromCamera = t;
-			rti.intersectedTriangle = mT;
-			rti.intersectionPoint = intersection;
+
+		if ((u >= 0.0) && (u <= 1.0) && (v >= 0.0) && (v <= 1.0) && (u + v) <= 1.0) {
+			if (rti.distanceFromCamera > t && t >= 0) {
+				rti.distanceFromCamera = t;
+				rti.intersectedTriangle = mT;
+				rti.intersectionPoint = intersection;
+				// std::cout << rti << std::endl;
+			}
 		}
 	}
 	return rti;
 }
 
-void renderPointCloud(DrawingWindow &window, float focalLength) {
+void renderRasterised(DrawingWindow &window, float focalLength) {
 
 	std::vector<std::vector<float>> depthBuffer(WIDTH, std::vector<float>(HEIGHT, 0));
 	for (ModelTriangle t : modelTriangles) {
@@ -498,12 +513,27 @@ void orbit() {
 	}
 }
 
-void drawFile(DrawingWindow &window) {
-	renderPointCloud(window, focalLength);
+void draw(DrawingWindow &window) {
+	window.clearPixels();
+	for (int y = 0; y < window.height; y++) {
+		for (int x = 0; x < window.width; x++) {
+			RayTriangleIntersection rti = getClosestIntersection(getDirectionVector(CanvasPoint(x,y,focalLength)));
+			if(!isinf(rti.distanceFromCamera)) {
+				Colour c = rti.intersectedTriangle.colour;
+				uint32_t colour = (255 << 24) + (c.red << 16) + (c.green << 8) + c.blue;
+				window.setPixelColour(x, y, colour);
+			}
+		}
+	}
 	orbit();
 }
 
-void draw(DrawingWindow &window) {
+void drawFile(DrawingWindow &window) {
+	renderRasterised(window, focalLength);
+	orbit();
+}
+
+void drawRasterisedScene(DrawingWindow &window) {
 	window.clearPixels();
 	// for (size_t y = 0; y < window.height; y++) {
 	// 	for (size_t x = 0; x < window.width; x++) {
@@ -605,7 +635,7 @@ int main(int argc, char *argv[]) {
 	std::string objFile = "cornell-box.obj";
 	std::string mtlFile = "cornell-box.mtl";
 	parseFiles(objFile, mtlFile, 0.35);
-
+	
 	// draw(window);
 	// std::vector<float> result;
 	// result = interpolateSingleFloats(2.2, 8.5, 7);
@@ -623,6 +653,7 @@ int main(int argc, char *argv[]) {
 		// We MUST poll for events - otherwise the window will freeze !
 		if (window.pollForInputEvents(event)) handleEvent(event, window);
 		draw(window);
+		// drawRasterisedScene(window);
 		// Need to render the frame at the end, or nothing actually gets shown on the screen !
 		window.renderFrame();
 	}
