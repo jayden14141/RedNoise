@@ -23,6 +23,7 @@ glm::vec3 cameraPosition = glm::vec3(0.0, 0.0, 6.0);
 float focalLength = 2.0;
 glm::mat3 cameraOrientation = glm::mat3(1.0);
 bool orbits = false;
+int draw_mode = 2;
 
 // Interpolation for colour (rgb) => vec3
 std::vector<glm::vec3> interpolateThreeElementValues (glm::vec3 from, glm::vec3 to, int numberOfValues) {
@@ -381,20 +382,21 @@ CanvasPoint getCanvasIntersectionPoint(glm::vec3 &cameraPosition, glm::vec3 &ver
 	return CanvasPoint(canvasX, canvasY, depth);
 }
 
-
+// Returns a directional vector from the 2D canvaspoint to the camera Position
 glm::vec3 getDirectionVector(CanvasPoint canvasPosition) {
-	float dZ = -1 * canvasPosition.depth;
-	float dX = -dZ * (canvasPosition.x - WIDTH / 2) / (HEIGHT * focalLength);
-	float dY = dZ * (canvasPosition.y - HEIGHT / 2) / (HEIGHT * focalLength);
-	// glm::vec3 rayDirection = glm::normalize(glm::vec3(dX, dY, dZ) + cameraPosition);
-	// std::cout << rayDirection[0] << ", " << rayDirection[1] << ", " << rayDirection[2] << std::endl;
+	glm::vec3 direction = glm::vec3(canvasPosition.x, canvasPosition.y, 0) + cameraPosition;
+	float dZ = -1 * direction[2];
+	float dX = -dZ * (direction[0] - WIDTH / 2) / (HEIGHT * focalLength);
+	float dY = dZ * (direction[1] - HEIGHT / 2) / (HEIGHT * focalLength);
 	return glm::normalize(glm::vec3(dX, dY, dZ));
 }
 
 RayTriangleIntersection getClosestIntersection (glm::vec3 rayDirection) {
 	RayTriangleIntersection rti;
 	rti.distanceFromCamera = std::numeric_limits<float>::infinity();
+	rayDirection = cameraOrientation * rayDirection;
 
+	int index = 0;
 	for (ModelTriangle mT : modelTriangles) {
 		glm::vec3 e0 = mT.vertices[1] - mT.vertices[0];
 		glm::vec3 e1 = mT.vertices[2] - mT.vertices[0];
@@ -412,11 +414,37 @@ RayTriangleIntersection getClosestIntersection (glm::vec3 rayDirection) {
 				rti.distanceFromCamera = t;
 				rti.intersectedTriangle = mT;
 				rti.intersectionPoint = intersection;
+				rti.triangleIndex = index;
 				// std::cout << rti << std::endl;
 			}
 		}
+		index++;
 	}
 	return rti;
+}
+
+bool is_shadow (RayTriangleIntersection rti, glm::vec3 rayDirection) {
+
+	glm::vec3 direction = rayDirection - rti.intersectionPoint;
+	int index = 0;
+	for (ModelTriangle mT : modelTriangles) {
+		glm::vec3 e0 = mT.vertices[1] - mT.vertices[0];
+		glm::vec3 e1 = mT.vertices[2] - mT.vertices[0];
+		glm::vec3 spVector = rti.intersectionPoint - mT.vertices[0];
+		glm::mat3 deMatrix(-direction, e0, e1);
+		glm::vec3 possibleSol = glm::inverse(deMatrix) * spVector;
+		float t = possibleSol[0];
+		float u = possibleSol[1];
+		float v = possibleSol[2];
+
+		if ((u >= 0.0) && (u <= 1.0) && (v >= 0.0) && (v <= 1.0) && (u + v) <= 1.0) {
+			if (t >= 0 && index != rti.triangleIndex) {
+				return true;
+			}
+		}
+		index++;
+	}
+	return false;
 }
 
 void renderRasterised(DrawingWindow &window, float focalLength) {
@@ -508,33 +536,33 @@ void lookAt() {
 
 void orbit() {
 	if (orbits) {
-		rotate_camera(false, -PI / 400);
+		rotate_camera(false, -PI / 200);
 		lookAt();
 	}
 }
 
-void draw(DrawingWindow &window) {
-	window.clearPixels();
+void drawRayTrace(DrawingWindow &window) {
 	for (int y = 0; y < window.height; y++) {
 		for (int x = 0; x < window.width; x++) {
-			RayTriangleIntersection rti = getClosestIntersection(getDirectionVector(CanvasPoint(x,y,focalLength)));
+			RayTriangleIntersection rti = getClosestIntersection(getDirectionVector(CanvasPoint(x,y,0)));
 			if(!isinf(rti.distanceFromCamera)) {
 				Colour c = rti.intersectedTriangle.colour;
 				uint32_t colour = (255 << 24) + (c.red << 16) + (c.green << 8) + c.blue;
-				window.setPixelColour(x, y, colour);
+				if (is_shadow(rti, glm::vec3(0,0,1))) {
+					uint32_t shadow = (255 << 24);
+					window.setPixelColour(x, y, shadow);
+				}
+				else window.setPixelColour(x, y, colour);
+				// window.setPixelColour(x, y, colour);
+				// Checking the light location (150, 45)
+				// if (colour == (255 << 24) + (255 << 16) + (255 << 8) + 255) std::cout << x << ", " << y << std::endl;
 			}
 		}
 	}
 	orbit();
 }
 
-void drawFile(DrawingWindow &window) {
-	renderRasterised(window, focalLength);
-	orbit();
-}
-
-void drawRasterisedScene(DrawingWindow &window) {
-	window.clearPixels();
+void drawRasterised(DrawingWindow &window) {
 	// for (size_t y = 0; y < window.height; y++) {
 	// 	for (size_t x = 0; x < window.width; x++) {
 	// 		float red = rand() % 256;
@@ -600,15 +628,36 @@ void drawRasterisedScene(DrawingWindow &window) {
 
 
 	// Wk4 Task02, 03
-	drawFile(window);
-
+	renderRasterised(window, focalLength);
+	orbit();
 }
+
+void drawWireframe(DrawingWindow &window) {
+	std::vector<std::vector<float>> depthBuffer(WIDTH, std::vector<float>(HEIGHT, 0));
+	for (ModelTriangle t : modelTriangles) {
+		CanvasPoint v0 = getCanvasIntersectionPoint(cameraPosition, t.vertices[0], focalLength);
+		CanvasPoint v1 = getCanvasIntersectionPoint(cameraPosition, t.vertices[1], focalLength);
+		CanvasPoint v2 = getCanvasIntersectionPoint(cameraPosition, t.vertices[2], focalLength);
+		CanvasTriangle ct = CanvasTriangle(v0, v1, v2);
+		
+		unfilledTriangle(window, ct, Colour(255, 255, 255));
+	}
+	orbit();
+}
+
+void draw(DrawingWindow &window) {
+	window.clearPixels();
+	if (draw_mode == 0) drawWireframe(window);
+	else if (draw_mode == 1) drawRasterised(window);
+	else if (draw_mode == 2) drawRayTrace(window);
+}
+
 void handleEvent(SDL_Event event, DrawingWindow &window) {
 	if (event.type == SDL_KEYDOWN) {
-		if (event.key.keysym.sym == SDLK_1) rotate_camera(false, -PI / 16);
-		else if (event.key.keysym.sym == SDLK_2) rotate_camera(false, PI / 16);
-		else if (event.key.keysym.sym == SDLK_3) rotate_camera(true, -PI / 16);
-		else if (event.key.keysym.sym == SDLK_4) rotate_camera(true, PI / 16);
+		if (event.key.keysym.sym == SDLK_z) rotate_camera(false, -PI / 16);
+		else if (event.key.keysym.sym == SDLK_x) rotate_camera(false, PI / 16);
+		else if (event.key.keysym.sym == SDLK_c) rotate_camera(true, -PI / 16);
+		else if (event.key.keysym.sym == SDLK_v) rotate_camera(true, PI / 16);
 		else if (event.key.keysym.sym == SDLK_w) translate_camera(1, true);
 		else if (event.key.keysym.sym == SDLK_a) translate_camera(0, false);
 		else if (event.key.keysym.sym == SDLK_s) translate_camera(1, false);
@@ -619,6 +668,9 @@ void handleEvent(SDL_Event event, DrawingWindow &window) {
 		else if (event.key.keysym.sym == SDLK_RIGHT) change_orientation(false, PI / 16);
 		else if (event.key.keysym.sym == SDLK_UP) change_orientation(true, -PI / 16);
 		else if (event.key.keysym.sym == SDLK_DOWN) change_orientation(true, PI / 16);
+		else if (event.key.keysym.sym == SDLK_1) draw_mode = 0;
+		else if (event.key.keysym.sym == SDLK_2) draw_mode = 1;
+		else if (event.key.keysym.sym == SDLK_3) draw_mode = 2;
 		else if (event.key.keysym.sym == SDLK_o) orbits = !orbits;
 		else if (event.key.keysym.sym == SDLK_l) lookAt();
 		else if (event.key.keysym.sym == SDLK_u) unfilledTriangle(window);
@@ -653,7 +705,7 @@ int main(int argc, char *argv[]) {
 		// We MUST poll for events - otherwise the window will freeze !
 		if (window.pollForInputEvents(event)) handleEvent(event, window);
 		draw(window);
-		// drawRasterisedScene(window);
+		// drawRasterised(window);
 		// Need to render the frame at the end, or nothing actually gets shown on the screen !
 		window.renderFrame();
 	}
