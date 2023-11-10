@@ -23,6 +23,7 @@ glm::vec3 cameraPosition = glm::vec3(0.0, 0.0, 6.0);
 float focalLength = 2.0;
 glm::mat3 cameraOrientation = glm::mat3(1.0);
 bool orbits = false;
+bool lightMove = false;
 int draw_mode = 2;
 float camDegree = 0;
 // glm::vec3 light(0.2, 0.95, -0.18);
@@ -73,30 +74,32 @@ void rotate_camera(bool x_axis, float degree) {
 	cameraPosition = cameraPosition * m;
 }
 
-void translate_camera(int where, bool positive) {
+// Translates either camera poisition or light position depending on 'lightMove' variable
+void translate(glm::vec3 &what, int where, bool positive) {
 
 	//translate by x
 	if (where == 0) {
 		if (positive) {
-			cameraPosition += glm::vec3(0.2, 0, 0);
+			what += glm::vec3(0.2, 0, 0);
 		} else {
-			cameraPosition -= glm::vec3(0.2, 0, 0);
+			what -= glm::vec3(0.2, 0, 0);
 		}
 	//translate by y
 	} else if (where == 1) {
 		if (positive) {
-			cameraPosition += glm::vec3(0, 0.2, 0);
+			what += glm::vec3(0, 0.2, 0);
 		} else {
-			cameraPosition -= glm::vec3(0, 0.2, 0);
+			what -= glm::vec3(0, 0.2, 0);
 		}
 	//translate by z
 	} else {
 		if (positive) {
-			cameraPosition += glm::vec3(0, 0, 0.2);
+			what += glm::vec3(0, 0, 0.2);
 		} else {
-			cameraPosition -= glm::vec3(0, 0, 0.2);
+			what -= glm::vec3(0, 0, 0.2);
 		}
 	}
+	std::cout << light.x << ", " << light.y << ", " << light.z << std::endl;
 }
 
 void lookAt() {
@@ -499,9 +502,10 @@ void drawRayTrace(DrawingWindow &window) {
 			if(rti.distanceFromCamera < std::numeric_limits<float>::infinity()) {
 				glm::vec3 lightVector = light - rti.intersectionPoint;
 				float distance = glm::length(lightVector);
-				float brightness = 10.0 / (4 * PI * distance * distance);
+				float brightness = 20.0 / (4 * PI * distance * distance);
 				float incidence = glm::dot(glm::normalize(rti.intersectedTriangle.normal), glm::normalize(lightVector));
 				float illuminity = brightness * incidence;
+				if (illuminity > 1) illuminity = 1;
 				Colour c = rti.intersectedTriangle.colour;
 				uint32_t colour = (255 << 24) + (int(c.red * illuminity) << 16) + (int(c.green * illuminity) << 8) + (int(c.blue * illuminity));
 				if (is_shadow(rti)) {
@@ -618,12 +622,12 @@ void handleEvent(SDL_Event event, DrawingWindow &window) {
 		else if (event.key.keysym.sym == SDLK_x) rotate_camera(false, PI / 16);
 		else if (event.key.keysym.sym == SDLK_c) rotate_camera(true, -PI / 16);
 		else if (event.key.keysym.sym == SDLK_v) rotate_camera(true, PI / 16);
-		else if (event.key.keysym.sym == SDLK_w) translate_camera(1, true);
-		else if (event.key.keysym.sym == SDLK_a) translate_camera(0, false);
-		else if (event.key.keysym.sym == SDLK_s) translate_camera(1, false);
-		else if (event.key.keysym.sym == SDLK_d) translate_camera(0, true);
-		else if (event.key.keysym.sym == SDLK_q) translate_camera(2, true);
-		else if (event.key.keysym.sym == SDLK_e) translate_camera(2, false);
+		else if (event.key.keysym.sym == SDLK_w) lightMove? translate(light, 1, true): translate(cameraPosition, 1, true);
+		else if (event.key.keysym.sym == SDLK_a) lightMove? translate(light, 0, false): translate(cameraPosition, 0, false);
+		else if (event.key.keysym.sym == SDLK_s) lightMove? translate(light, 1, false): translate(cameraPosition, 1, false);
+		else if (event.key.keysym.sym == SDLK_d) lightMove? translate(light, 0, true): translate(cameraPosition, 0, true);
+		else if (event.key.keysym.sym == SDLK_q) lightMove? translate(light, 2, true): translate(cameraPosition, 2, true);
+		else if (event.key.keysym.sym == SDLK_e) lightMove? translate(light, 2, false): translate(cameraPosition, 2, false);
 		else if (event.key.keysym.sym == SDLK_LEFT) change_orientation(false, -PI / 16);
 		else if (event.key.keysym.sym == SDLK_RIGHT) change_orientation(false, PI / 16);
 		else if (event.key.keysym.sym == SDLK_UP) change_orientation(true, -PI / 16);
@@ -632,6 +636,14 @@ void handleEvent(SDL_Event event, DrawingWindow &window) {
 		else if (event.key.keysym.sym == SDLK_2) draw_mode = 1;
 		else if (event.key.keysym.sym == SDLK_3) draw_mode = 2;
 		else if (event.key.keysym.sym == SDLK_o) orbits = !orbits;
+		else if (event.key.keysym.sym == SDLK_p) {
+			lightMove = !lightMove;
+			if (lightMove) {
+				std::cout << "Translation changes Light Position" << std::endl;
+			} else {
+				std::cout << "Translation changes Camera Position" << std::endl;
+			}
+		}
 		else if (event.key.keysym.sym == SDLK_l) lookAt();
 		else if (event.key.keysym.sym == SDLK_u) unfilledTriangle(window);
 		else if (event.key.keysym.sym == SDLK_f) filledTriangle(window);
