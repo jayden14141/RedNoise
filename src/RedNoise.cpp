@@ -24,6 +24,8 @@ float focalLength = 2.0;
 glm::mat3 cameraOrientation = glm::mat3(1.0);
 bool orbits = false;
 int draw_mode = 2;
+float camDegree = 0;
+
 
 void sort(bool yAxis, CanvasTriangle &t) {
 	if (yAxis) {
@@ -55,6 +57,7 @@ void change_orientation(bool x_axis, float degree) {
 
 void rotate_camera(bool x_axis, float degree) {
 	glm::mat3 m;
+	camDegree += degree;
 	if (x_axis) {
 		m = glm::mat3(
    			1, 0, 0,
@@ -381,7 +384,11 @@ CanvasPoint getCanvasIntersectionPoint(glm::vec3 &cameraPosition, glm::vec3 &ver
 
 // Returns a directional vector from the 2D canvaspoint to the camera Position
 glm::vec3 getDirectionVector(CanvasPoint canvasPosition) {
-	glm::vec3 direction = glm::vec3(canvasPosition.x, canvasPosition.y, 0) + cameraPosition;
+	// glm::vec3 direction;
+	// if ((fmod(camDegree, 2*PI >= 0) && fmod(camDegree ,2*PI <= PI / 2)) || (fmod(camDegree, 2*PI >= 3*PI/2) && fmod(camDegree, 2*PI <= 2*PI))) {
+	// 	direction = glm::vec3(canvasPosition.x, canvasPosition.y, 0) + cameraPosition;
+	// } else direction = glm::vec3(canvasPosition.x, canvasPosition.y, 0) - cameraPosition;
+	glm::vec3 direction =  glm::vec3(canvasPosition.x, canvasPosition.y, 100) + cameraPosition;
 	float dZ = -1 * direction[2];
 	float dX = -dZ * (direction[0] - WIDTH / 2) / (HEIGHT * focalLength);
 	float dY = dZ * (direction[1] - HEIGHT / 2) / (HEIGHT * focalLength);
@@ -392,6 +399,9 @@ RayTriangleIntersection getClosestIntersection (glm::vec3 &rayDirection) {
 	RayTriangleIntersection rti;
 	rti.distanceFromCamera = std::numeric_limits<float>::infinity();
 	rayDirection = cameraOrientation * rayDirection;
+	// for (int i = 0; i < 3; i++) {
+	// 	std::cout << rayDirection.x << ", " << rayDirection.y << ", " << rayDirection.z << std::endl;
+	// }
 
 	int index = 0;
 	for (ModelTriangle mT : modelTriangles) {
@@ -482,7 +492,9 @@ void drawRayTrace(DrawingWindow &window) {
 		for (int x = 0; x < window.width; x++) {
 			glm::vec3 rayDirection = getDirectionVector(CanvasPoint(x,y,0));
 			RayTriangleIntersection rti = getClosestIntersection(rayDirection);
-			if(!isinf(rti.distanceFromCamera)) {
+			// std::cout << rti.distanceFromCamera << std::endl;
+			if(rti.distanceFromCamera < std::numeric_limits<float>::infinity()) {
+				// std::cout << rti.distanceFromCamera << std::endl;
 				Colour c = rti.intersectedTriangle.colour;
 				uint32_t colour = (255 << 24) + (c.red << 16) + (c.green << 8) + c.blue;
 				if (is_shadow(rti, glm::vec3(0,0,1.5))) {
@@ -496,6 +508,16 @@ void drawRayTrace(DrawingWindow &window) {
 			}
 		}
 	}
+	// for (int i = 0; i < 3; ++i) {
+	// 	for (int j = 0; j < 3; ++j) {
+	// 			std::cout << cameraOrientation[i][j] << " ";
+	// 	}
+    // 	std::cout << std::endl;
+	// }
+	// std::cout << std::endl;
+	// for (int i = 0; i < 3; i++) {
+	// 	std::cout << cameraPosition.x << ", " << cameraPosition.y << ", " << cameraPosition.z << std::endl;
+	// }
 	orbit();
 }
 
