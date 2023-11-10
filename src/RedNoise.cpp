@@ -25,7 +25,8 @@ glm::mat3 cameraOrientation = glm::mat3(1.0);
 bool orbits = false;
 int draw_mode = 2;
 float camDegree = 0;
-
+// glm::vec3 light(0.2, 0.95, -0.18);
+glm::vec3 light(0, 0, 1.5);
 
 void sort(bool yAxis, CanvasTriangle &t) {
 	if (yAxis) {
@@ -378,16 +379,15 @@ CanvasPoint getCanvasIntersectionPoint(glm::vec3 &cameraPosition, glm::vec3 &ver
 	float canvasX = HEIGHT * (focalLength * -direction[0] / direction[2]) + WIDTH / 2;
 	float canvasY = HEIGHT * (focalLength * direction[1] / direction[2]) + HEIGHT / 2;
 	float depth =  -direction[2];
-	// std::cout << depth << std::endl;
 	return CanvasPoint(canvasX, canvasY, depth);
 }
 
 // Returns a directional vector from the 2D canvaspoint to the camera Position
 glm::vec3 getDirectionVector(CanvasPoint canvasPosition) {
 	// glm::vec3 direction;
-	// if ((fmod(camDegree, 2*PI >= 0) && fmod(camDegree ,2*PI <= PI / 2)) || (fmod(camDegree, 2*PI >= 3*PI/2) && fmod(camDegree, 2*PI <= 2*PI))) {
-	// 	direction = glm::vec3(canvasPosition.x, canvasPosition.y, 0) + cameraPosition;
-	// } else direction = glm::vec3(canvasPosition.x, canvasPosition.y, 0) - cameraPosition;
+	// Bug : - Camera on 1/4 th quadrant : direction = glm::vec3(canvasPosition.x, canvasPosition.y, 0) + cameraPosition;
+	// 		 - Camera on 2/3 th quadrant : direction = glm::vec3(canvasPosition.x, canvasPosition.y, 0) - cameraPosition;
+	//		 - Having a large z value solves the issue (Why..?)
 	glm::vec3 direction =  glm::vec3(canvasPosition.x, canvasPosition.y, 100) + cameraPosition;
 	float dZ = -1 * direction[2];
 	float dX = -dZ * (direction[0] - WIDTH / 2) / (HEIGHT * focalLength);
@@ -399,10 +399,7 @@ RayTriangleIntersection getClosestIntersection (glm::vec3 &rayDirection) {
 	RayTriangleIntersection rti;
 	rti.distanceFromCamera = std::numeric_limits<float>::infinity();
 	rayDirection = cameraOrientation * rayDirection;
-	// for (int i = 0; i < 3; i++) {
-	// 	std::cout << rayDirection.x << ", " << rayDirection.y << ", " << rayDirection.z << std::endl;
-	// }
-
+	
 	int index = 0;
 	for (ModelTriangle mT : modelTriangles) {
 		glm::vec3 e0 = mT.vertices[1] - mT.vertices[0];
@@ -418,6 +415,13 @@ RayTriangleIntersection getClosestIntersection (glm::vec3 &rayDirection) {
 
 		if ((u >= 0.0) && (u <= 1.0) && (v >= 0.0) && (v <= 1.0) && (u + v) <= 1.0) {
 			if (rti.distanceFromCamera > t && t >= 0) {
+				// std::string a("White");
+				// if (a.compare(mT.colour.name) == 0) {
+				// 	for (int i = 0; i < 3; i++) {
+				// 			std::cout << rayDirection.x << ", " << rayDirection.y << ", " << rayDirection.z << std::endl;
+				// 	}
+				// 	// std::cout <<  << std::endl;
+				// }
 				rti.distanceFromCamera = t;
 				rti.intersectedTriangle = mT;
 				rti.intersectionPoint = intersection;
@@ -431,9 +435,9 @@ RayTriangleIntersection getClosestIntersection (glm::vec3 &rayDirection) {
 }
 
 // Checking whether the rti.intersectionPoint is a shadow
-bool is_shadow (RayTriangleIntersection rti, glm::vec3 lightSource) {
+bool is_shadow (RayTriangleIntersection rti) {
 
-	glm::vec3 lightDirection = lightSource - rti.intersectionPoint;
+	glm::vec3 lightDirection = light - rti.intersectionPoint;
 	float length = glm::length(lightDirection);
 	lightDirection = cameraOrientation * lightDirection;
 
@@ -492,19 +496,26 @@ void drawRayTrace(DrawingWindow &window) {
 		for (int x = 0; x < window.width; x++) {
 			glm::vec3 rayDirection = getDirectionVector(CanvasPoint(x,y,0));
 			RayTriangleIntersection rti = getClosestIntersection(rayDirection);
-			// std::cout << rti.distanceFromCamera << std::endl;
 			if(rti.distanceFromCamera < std::numeric_limits<float>::infinity()) {
-				// std::cout << rti.distanceFromCamera << std::endl;
+				glm::vec3 lightVector = light - rti.intersectionPoint;
+				float distance = glm::length(lightVector);
+				float brightness = 10.0 / (4 * PI * distance * distance);
+				float incidence = glm::dot(glm::normalize(rti.intersectedTriangle.normal), glm::normalize(lightVector));
+				float illuminity = brightness * incidence;
 				Colour c = rti.intersectedTriangle.colour;
-				uint32_t colour = (255 << 24) + (c.red << 16) + (c.green << 8) + c.blue;
-				if (is_shadow(rti, glm::vec3(0,0,1.5))) {
+				uint32_t colour = (255 << 24) + (int(c.red * illuminity) << 16) + (int(c.green * illuminity) << 8) + (int(c.blue * illuminity));
+				if (is_shadow(rti)) {
 					uint32_t shadow = (255 << 24);
 					window.setPixelColour(x, y, shadow);
 				}
 				else window.setPixelColour(x, y, colour);
 				// window.setPixelColour(x, y, colour);
-				// Checking the light location (150, 45)
-				// if (colour == (255 << 24) + (255 << 16) + (255 << 8) + 255) std::cout << x << ", " << y << std::endl;
+				// Checking the light location
+				// (-0.227154, 0.958474, -0.181289)
+				// (0.227846, 0.958474, -0.181289)
+				// (0.227846, 0.958767, 0.186211)
+
+				// (0.0308607, 0.154303, -0.987541)
 			}
 		}
 	}
@@ -583,7 +594,9 @@ std::vector<ModelTriangle> parseObj (const std::string &filename, std::map<std::
 				facet.push_back(std::stoi(split(s[2], '/').at(0)));
 				facet.push_back(std::stoi(split(s[3], '/').at(0)));
 				// facets.push_back(facet);
-				mT.push_back(ModelTriangle(vertices[facet[0]], vertices[facet[1]], vertices[facet[2]], currentColour));
+				ModelTriangle m = ModelTriangle(vertices[facet[0]], vertices[facet[1]], vertices[facet[2]], currentColour);
+				m.normal = glm::cross(m.vertices[1] - m.vertices[0], m.vertices[2] - m.vertices[0]);
+				mT.push_back(m);
 			} else {
 				continue;
 			}
