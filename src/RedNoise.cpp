@@ -501,15 +501,25 @@ void drawRayTrace(DrawingWindow &window) {
 			RayTriangleIntersection rti = getClosestIntersection(rayDirection);
 			if(rti.distanceFromCamera < std::numeric_limits<float>::infinity()) {
 				glm::vec3 lightVector = light - rti.intersectionPoint;
+				glm::vec3 viewVector = glm::normalize(cameraPosition - rti.intersectionPoint);
+				glm::vec3 normalVector = glm::normalize(rti.intersectedTriangle.normal);
+				// r = d - 2(d*n)n where r -> reflectionVector, d -> viewVector, n -> normalVector (normalized)
+				glm::vec3 reflectionVector = glm::normalize(glm::normalize(lightVector) - (2 * glm::dot(viewVector, normalVector)) * normalVector);
 				float distance = glm::length(lightVector);
 				float brightness = 20.0 / (4 * PI * distance * distance);
 				float incidence = glm::dot(glm::normalize(rti.intersectedTriangle.normal), glm::normalize(lightVector));
-				float illuminity = brightness * incidence;
+				float diffuse = brightness * incidence;
+				float specular = pow(dot(reflectionVector, viewVector), 256);
+				float ambiant = 0.2;
+				float threshold = 0.3;
+
+				float illuminity = diffuse + specular + ambiant;
+				illuminity = std::max(illuminity, threshold);
 				if (illuminity > 1) illuminity = 1;
 				Colour c = rti.intersectedTriangle.colour;
 				uint32_t colour = (255 << 24) + (int(c.red * illuminity) << 16) + (int(c.green * illuminity) << 8) + (int(c.blue * illuminity));
 				if (is_shadow(rti)) {
-					uint32_t shadow = (255 << 24);
+					uint32_t shadow = (255 << 24) + (int(c.red * ambiant) << 16) + (int(c.green * ambiant) << 8) + (int(c.blue * ambiant));
 					window.setPixelColour(x, y, shadow);
 				}
 				else window.setPixelColour(x, y, colour);
