@@ -41,6 +41,10 @@ void sort(bool yAxis, CanvasTriangle &t) {
 	}
 }
 
+bool compareVertices(glm::vec3 &v1, glm::vec3 &v2) {
+	return ((v1.x == v2.x) && (v1.y == v2.y) && (v1.z == v2.z));
+}
+
 void change_orientation(bool x_axis, float degree) {
 	glm::mat3 m;
 	if (x_axis) {
@@ -385,6 +389,47 @@ CanvasPoint getCanvasIntersectionPoint(glm::vec3 &cameraPosition, glm::vec3 &ver
 	return CanvasPoint(canvasX, canvasY, depth);
 }
 
+// Returns vectors of vertexNormals of the given RayTriangleIntersection
+std::vector<glm::vec3> vertexNormal(RayTriangleIntersection &rti) {
+	std::vector<glm::vec3> vertexNormals;
+	for (int i = 0; i < 3; i++) {
+		glm::vec3 v(0,0,0);
+		// Makes it count itself as well
+		int count = 0;
+		for (ModelTriangle compare : modelTriangles) {
+			for (int j = 0; j < 3; j++) {
+				if (compareVertices(rti.intersectedTriangle.vertices[i], compare.vertices[j])) {
+					count++;
+					v += compare.normal;
+				}
+			}
+		}
+		v /= (float)count;
+		glm::normalize(v);
+		vertexNormals.push_back(v);
+	}
+	return vertexNormals;
+}
+
+// Returns barycentric coordinate of point P which is intersection point of rti
+glm::vec3 barycentric(RayTriangleIntersection &rti) {
+	glm::vec3 v0 = rti.intersectedTriangle.vertices[1] - rti.intersectedTriangle.vertices[0];
+	glm::vec3 v1 = rti.intersectedTriangle.vertices[2] - rti.intersectedTriangle.vertices[0];
+	glm::vec3 v2 = rti.intersectionPoint - rti.intersectedTriangle.vertices[0];
+
+    float d00 = glm::dot(v0, v0);
+    float d01 = glm::dot(v0, v1);
+    float d11 = glm::dot(v1, v1);
+    float d20 = glm::dot(v2, v0);
+    float d21 = glm::dot(v2, v1);
+
+    float size = d00 * d11 - d01 * d01;
+    float u = (d11 * d20 - d01 * d21) / size;
+    float v = (d00 * d21 - d01 * d20) / size;
+    float w = (float)1 - u - v;
+	return glm::vec3(w, u, v);
+}
+
 // Returns a directional vector from the 2D canvaspoint to the camera Position
 glm::vec3 getDirectionVector(CanvasPoint canvasPosition) {
 	// glm::vec3 direction;
@@ -465,6 +510,19 @@ bool is_shadow (RayTriangleIntersection rti) {
 	return false;
 }
 
+void drawWireframe(DrawingWindow &window) {
+	std::vector<std::vector<float>> depthBuffer(WIDTH, std::vector<float>(HEIGHT, 0));
+	for (ModelTriangle t : modelTriangles) {
+		CanvasPoint v0 = getCanvasIntersectionPoint(cameraPosition, t.vertices[0], focalLength);
+		CanvasPoint v1 = getCanvasIntersectionPoint(cameraPosition, t.vertices[1], focalLength);
+		CanvasPoint v2 = getCanvasIntersectionPoint(cameraPosition, t.vertices[2], focalLength);
+		CanvasTriangle ct = CanvasTriangle(v0, v1, v2);
+		
+		unfilledTriangle(window, ct, Colour(255, 255, 255));
+	}
+	orbit();
+}
+
 void renderRasterised(DrawingWindow &window, float focalLength) {
 
 	std::vector<std::vector<float>> depthBuffer(WIDTH, std::vector<float>(HEIGHT, 0));
@@ -479,17 +537,63 @@ void renderRasterised(DrawingWindow &window, float focalLength) {
 	}
 }
 
-void drawWireframe(DrawingWindow &window) {
-	std::vector<std::vector<float>> depthBuffer(WIDTH, std::vector<float>(HEIGHT, 0));
-	for (ModelTriangle t : modelTriangles) {
-		CanvasPoint v0 = getCanvasIntersectionPoint(cameraPosition, t.vertices[0], focalLength);
-		CanvasPoint v1 = getCanvasIntersectionPoint(cameraPosition, t.vertices[1], focalLength);
-		CanvasPoint v2 = getCanvasIntersectionPoint(cameraPosition, t.vertices[2], focalLength);
-		CanvasTriangle ct = CanvasTriangle(v0, v1, v2);
-		
-		unfilledTriangle(window, ct, Colour(255, 255, 255));
-	}
+void drawRasterised(DrawingWindow &window) {
+	renderRasterised(window, focalLength);
 	orbit();
+}
+
+float flatLighting(RayTriangleIntersection &rti) {
+	glm::vec3 lightVector = light - rti.intersectionPoint;
+
+	// Diffuse Lighting
+	float distance = glm::length(lightVector);
+	float illuminity = 20.0 / (4 * PI * distance * distance);
+	float incidence = glm::dot(rti.intersectedTriangle.normal, glm::normalize(lightVector));
+	incidence = std::fmax(incidence, 0);
+	float diffuse = illuminity * incidence;
+
+	// Specular Lighting
+	glm::vec3 viewVector = glm::normalize(cameraPosition - rti.intersectionPoint);
+	glm::vec3 normalVector = glm::normalize(rti.intersectedTriangle.normal);
+	// r = d - 2(d*n)n where r -> reflectionVector, d -> viewVector, n -> normalVector (normalized)
+	glm::vec3 reflectionVector = glm::normalize(glm::normalize(lightVector) - (2 * glm::dot(viewVector, normalVector)) * normalVector);
+	float viewAndReflection = dot(reflectionVector, viewVector);
+	viewAndReflection = std::fmax(viewAndReflection, 0);
+	float specular = pow(viewAndReflection, 256);
+
+	float brightness = diffuse + specular;
+
+	return brightness;
+}
+
+float gouraudLighting(RayTriangleIntersection &rti) {
+	std::vector<glm::vec3> vN = vertexNormal(rti);
+	glm::vec3 weight = barycentric(rti);
+	glm::vec3 lightVector = light - rti.intersectionPoint;
+
+	// Diffuse Lighting
+	float distance = glm::length(lightVector);
+	float illuminity = 20.0 / (4 * PI * distance * distance);
+	float incidence = 0;
+	for (int i = 0; i < 3; i++) {
+		incidence += weight[i] * glm::dot(vN[i], glm::normalize(lightVector));
+	}
+	incidence = std::fmax(incidence, 0);
+	float diffuse = illuminity * incidence;
+
+	// Specular Lighting
+	glm::vec3 viewVector = glm::normalize(cameraPosition - rti.intersectionPoint);
+	// r = d - 2(d*n)n where r -> reflectionVector, d -> viewVector, n -> normalVector (normalized)
+	float specular = 0;
+	for (int i = 0; i < 3; i++) {
+		glm::vec3 reflectionVector = glm::normalize(glm::normalize(lightVector) - (2 * glm::dot(viewVector, vN[i])) * vN[i]);
+		float viewAndReflection = dot(reflectionVector, viewVector);
+		viewAndReflection = std::fmax(viewAndReflection, 0);
+		specular += weight[i] * pow(viewAndReflection, 256);
+	}
+
+	float brightness = diffuse + specular;
+	return brightness;
 }
 
 // Finds the closest intersection from the cameraPoisition to every pixel
@@ -499,31 +603,18 @@ void drawRayTrace(DrawingWindow &window) {
 			glm::vec3 rayDirection = getDirectionVector(CanvasPoint(x,y,0));
 			RayTriangleIntersection rti = getClosestIntersection(rayDirection);
 			if(rti.distanceFromCamera < std::numeric_limits<float>::infinity()) {
-				glm::vec3 lightVector = light - rti.intersectionPoint;
+				Colour c = rti.intersectedTriangle.colour;
 
-				float distance = glm::length(lightVector);
-				float brightness = 20.0 / (4 * PI * distance * distance);
-				float incidence = glm::dot(glm::normalize(rti.intersectedTriangle.normal), glm::normalize(lightVector));
-				incidence = std::fmax(incidence, 0);
-				float diffuse = brightness * incidence;
-
-				glm::vec3 viewVector = glm::normalize(cameraPosition - rti.intersectionPoint);
-				glm::vec3 normalVector = glm::normalize(rti.intersectedTriangle.normal);
-				// r = d - 2(d*n)n where r -> reflectionVector, d -> viewVector, n -> normalVector (normalized)
-				glm::vec3 reflectionVector = glm::normalize(glm::normalize(lightVector) - (2 * glm::dot(viewVector, normalVector)) * normalVector);
-				float viewAndReflection = dot(reflectionVector, viewVector);
-				viewAndReflection = std::fmax(viewAndReflection, 0);
-				float specular = pow(viewAndReflection, 256);
+				// brightness = flatLighting(rti);
+				float brightness = gouraudLighting(rti);
 
 				float ambiant = 0.2;
-
 				float threshold = 0.5;
+				brightness += ambiant;
+				brightness = std::fmax(brightness, threshold);
+				brightness = std::fmin(brightness, 1);
 
-				float illuminity = diffuse + specular + ambiant;
-				illuminity = std::fmax(illuminity, threshold);
-				illuminity = std::fmin(illuminity, 1);
-				Colour c = rti.intersectedTriangle.colour;
-				uint32_t colour = (255 << 24) + (int(c.red * illuminity) << 16) + (int(c.green * illuminity) << 8) + (int(c.blue * illuminity));
+				uint32_t colour = (255 << 24) + (int(c.red * brightness) << 16) + (int(c.green * brightness) << 8) + (int(c.blue * brightness));
 				if (is_shadow(rti)) {
 					uint32_t shadow = (255 << 24) + (int(c.red * ambiant) << 16) + (int(c.green * ambiant) << 8) + (int(c.blue * ambiant));
 					window.setPixelColour(x, y, shadow);
@@ -549,11 +640,6 @@ void drawRayTrace(DrawingWindow &window) {
 	// for (int i = 0; i < 3; i++) {
 	// 	std::cout << cameraPosition.x << ", " << cameraPosition.y << ", " << cameraPosition.z << std::endl;
 	// }
-	orbit();
-}
-
-void drawRasterised(DrawingWindow &window) {
-	renderRasterised(window, focalLength);
 	orbit();
 }
 
@@ -615,7 +701,7 @@ std::vector<ModelTriangle> parseObj (const std::string &filename, std::map<std::
 				facet.push_back(std::stoi(split(s[3], '/').at(0)));
 				// facets.push_back(facet);
 				ModelTriangle m = ModelTriangle(vertices[facet[0]], vertices[facet[1]], vertices[facet[2]], currentColour);
-				m.normal = glm::cross(m.vertices[1] - m.vertices[0], m.vertices[2] - m.vertices[0]);
+				m.normal = glm::normalize(glm::cross(m.vertices[1] - m.vertices[0], m.vertices[2] - m.vertices[0]));
 				mT.push_back(m);
 			} else {
 				continue;
