@@ -2,5 +2,7 @@
 
 .vscode/*
 
+.idea/*
+
 *.o
 build
