@@ -27,7 +27,7 @@ bool lightMove = false;
 int draw_mode = 2;
 float camDegree = 0;
 // glm::vec3 light(0.2, 0.95, -0.18);
-glm::vec3 light(0, 0, 1.5);
+glm::vec3 light(0, 0, 0.7);
 
 void sort(bool yAxis, CanvasTriangle &t) {
 	if (yAxis) {
@@ -442,7 +442,6 @@ bool is_shadow (RayTriangleIntersection rti) {
 
 	glm::vec3 lightDirection = light - rti.intersectionPoint;
 	float length = glm::length(lightDirection);
-	// lightDirection = cameraOrientation * lightDirection;
 
 	int index = 0;
 	for (ModelTriangle mT : modelTriangles) {
@@ -514,7 +513,7 @@ void drawRayTrace(DrawingWindow &window) {
 				glm::vec3 reflectionVector = glm::normalize(glm::normalize(lightVector) - (2 * glm::dot(viewVector, normalVector)) * normalVector);
 				float viewAndReflection = dot(reflectionVector, viewVector);
 				viewAndReflection = std::fmax(viewAndReflection, 0);
-				float specular = pow(dot(reflectionVector, viewVector), 256);
+				float specular = pow(viewAndReflection, 256);
 
 				float ambiant = 0.2;
 
