@@ -442,7 +442,7 @@ bool is_shadow (RayTriangleIntersection rti) {
 
 	glm::vec3 lightDirection = light - rti.intersectionPoint;
 	float length = glm::length(lightDirection);
-	lightDirection = cameraOrientation * lightDirection;
+	// lightDirection = cameraOrientation * lightDirection;
 
 	int index = 0;
 	for (ModelTriangle mT : modelTriangles) {
@@ -501,21 +501,28 @@ void drawRayTrace(DrawingWindow &window) {
 			RayTriangleIntersection rti = getClosestIntersection(rayDirection);
 			if(rti.distanceFromCamera < std::numeric_limits<float>::infinity()) {
 				glm::vec3 lightVector = light - rti.intersectionPoint;
+
+				float distance = glm::length(lightVector);
+				float brightness = 20.0 / (4 * PI * distance * distance);
+				float incidence = glm::dot(glm::normalize(rti.intersectedTriangle.normal), glm::normalize(lightVector));
+				incidence = std::fmax(incidence, 0);
+				float diffuse = brightness * incidence;
+
 				glm::vec3 viewVector = glm::normalize(cameraPosition - rti.intersectionPoint);
 				glm::vec3 normalVector = glm::normalize(rti.intersectedTriangle.normal);
 				// r = d - 2(d*n)n where r -> reflectionVector, d -> viewVector, n -> normalVector (normalized)
 				glm::vec3 reflectionVector = glm::normalize(glm::normalize(lightVector) - (2 * glm::dot(viewVector, normalVector)) * normalVector);
-				float distance = glm::length(lightVector);
-				float brightness = 20.0 / (4 * PI * distance * distance);
-				float incidence = glm::dot(glm::normalize(rti.intersectedTriangle.normal), glm::normalize(lightVector));
-				float diffuse = brightness * incidence;
+				float viewAndReflection = dot(reflectionVector, viewVector);
+				viewAndReflection = std::fmax(viewAndReflection, 0);
 				float specular = pow(dot(reflectionVector, viewVector), 256);
+
 				float ambiant = 0.2;
-				float threshold = 0.3;
+
+				float threshold = 0.5;
 
 				float illuminity = diffuse + specular + ambiant;
-				illuminity = std::max(illuminity, threshold);
-				if (illuminity > 1) illuminity = 1;
+				illuminity = std::fmax(illuminity, threshold);
+				illuminity = std::fmin(illuminity, 1);
 				Colour c = rti.intersectedTriangle.colour;
 				uint32_t colour = (255 << 24) + (int(c.red * illuminity) << 16) + (int(c.green * illuminity) << 8) + (int(c.blue * illuminity));
 				if (is_shadow(rti)) {
