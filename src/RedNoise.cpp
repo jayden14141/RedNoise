@@ -26,8 +26,6 @@ bool orbits = false;
 bool lightMove = false;
 int draw_mode = 2;
 int light_mode = 2;
-float camDegree = 0;
-// glm::vec3 light(0.2, 0.95, -0.18);
 glm::vec3 light(0, 0, 0.7);
 
 void sort(bool yAxis, CanvasTriangle &t) {
@@ -64,7 +62,6 @@ void change_orientation(bool x_axis, float degree) {
 
 void rotate_camera(bool x_axis, float degree) {
 	glm::mat3 m;
-	camDegree += degree;
 	if (x_axis) {
 		m = glm::mat3(
    			1, 0, 0,
@@ -601,27 +598,23 @@ float phongLighting(RayTriangleIntersection &rti) {
 	std::vector<glm::vec3> vN = vertexNormal(rti);
 	glm::vec3 weight = barycentric(rti);
 	glm::vec3 lightVector = light - rti.intersectionPoint;
+	glm::vec3 interpolatedNormal = glm::normalize((weight.x * vN[0]) + (weight.y * vN[1]) + (weight.z * vN[2]));
 
 	// Diffuse Lighting
 	float distance = glm::length(lightVector);
 	float illuminity = 40.0 / (4 * PI * distance * distance);
-	float incidence = 0;
-	for (int i = 0; i < 3; i++) {
-		incidence += weight[i] * glm::dot(vN[i], glm::normalize(lightVector));
-	}
+	float incidence = glm::dot(interpolatedNormal, glm::normalize(lightVector));
 	incidence = std::fmax(incidence, 0);
 	float diffuse = illuminity * incidence;
 
 	// Specular Lighting
 	glm::vec3 viewVector = glm::normalize(cameraPosition - rti.intersectionPoint);
 	// r = d - 2(d*n)n where r -> reflectionVector, d -> viewVector, n -> normalVector (normalized)
-	float specular = 0;
-	for (int i = 0; i < 3; i++) {
-		glm::vec3 reflectionVector = glm::normalize(glm::normalize(lightVector) - (2 * glm::dot(viewVector, vN[i])) * vN[i]);
-		float viewAndReflection = dot(reflectionVector, viewVector);
-		viewAndReflection = std::fmax(viewAndReflection, 0);
-		specular += weight[i] * pow(viewAndReflection, 256);
-	}
+	glm::vec3 reflectionVector;
+	reflectionVector =  glm::normalize(glm::normalize(lightVector) - (2 * glm::dot(viewVector, interpolatedNormal)) * interpolatedNormal);
+	float viewAndReflection = dot(reflectionVector, viewVector);
+	viewAndReflection = std::fmax(viewAndReflection, 0);
+	float specular = pow(viewAndReflection, 256);
 
 	float brightness = diffuse + specular;
 	return brightness;
@@ -655,26 +648,9 @@ void drawRayTrace(DrawingWindow &window) {
 					window.setPixelColour(x, y, shadow);
 				}
 				else window.setPixelColour(x, y, colour);
-				// window.setPixelColour(x, y, colour);
-				// Checking the light location
-				// (-0.227154, 0.958474, -0.181289)
-				// (0.227846, 0.958474, -0.181289)
-				// (0.227846, 0.958767, 0.186211)
-
-				// (0.0308607, 0.154303, -0.987541)
 			}
 		}
 	}
-	// for (int i = 0; i < 3; ++i) {
-	// 	for (int j = 0; j < 3; ++j) {
-	// 			std::cout << cameraOrientation[i][j] << " ";
-	// 	}
-    // 	std::cout << std::endl;
-	// }
-	// std::cout << std::endl;
-	// for (int i = 0; i < 3; i++) {
-	// 	std::cout << cameraPosition.x << ", " << cameraPosition.y << ", " << cameraPosition.z << std::endl;
-	// }
 	orbit();
 }
 
