@@ -553,8 +553,8 @@ float flatLighting(RayTriangleIntersection &rti) {
 	// Specular Lighting
 	glm::vec3 viewVector = glm::normalize(cameraPosition - rti.intersectionPoint);
 	glm::vec3 normalVector = glm::normalize(rti.intersectedTriangle.normal);
-	// r = d - 2(d*n)n where r -> reflectionVector, d -> viewVector, n -> normalVector (normalized)
-	glm::vec3 reflectionVector = glm::normalize(glm::normalize(lightVector) - (2 * glm::dot(viewVector, normalVector)) * normalVector);
+	// r = d - 2(d*n)n where r -> reflectionVector, d -> lightVector, n -> normalVector (normalized)
+	glm::vec3 reflectionVector = glm::normalize(glm::normalize(lightVector) - (2 * glm::dot(lightVector, normalVector)) * normalVector);
 	float viewAndReflection = dot(reflectionVector, viewVector);
 	viewAndReflection = std::fmax(viewAndReflection, 0);
 	float specular = pow(viewAndReflection, 256);
@@ -581,11 +581,11 @@ float gouraudLighting(RayTriangleIntersection &rti) {
 
 	// Specular Lighting
 	glm::vec3 viewVector = glm::normalize(cameraPosition - rti.intersectionPoint);
-	// r = d - 2(d*n)n where r -> reflectionVector, d -> viewVector, n -> normalVector (normalized)
+	// r = d - 2(d*n)n where r -> reflectionVector, d -> lightVector, n -> normalVector (normalized)
 	float specular = 0;
 	for (int i = 0; i < 3; i++) {
-		glm::vec3 reflectionVector = glm::normalize(glm::normalize(lightVector) - (2 * glm::dot(viewVector, vN[i])) * vN[i]);
-		float viewAndReflection = dot(reflectionVector, viewVector);
+		glm::vec3 reflectionVector = glm::normalize(glm::normalize(lightVector) - (2 * glm::dot(lightVector, vN[i])) * vN[i]);
+		float viewAndReflection = glm::dot(reflectionVector, viewVector);
 		viewAndReflection = std::fmax(viewAndReflection, 0);
 		specular += weight[i] * pow(viewAndReflection, 256);
 	}
@@ -609,10 +609,10 @@ float phongLighting(RayTriangleIntersection &rti) {
 
 	// Specular Lighting
 	glm::vec3 viewVector = glm::normalize(cameraPosition - rti.intersectionPoint);
-	// r = d - 2(d*n)n where r -> reflectionVector, d -> viewVector, n -> normalVector (normalized)
+	// r = d - 2(d*n)n where r -> reflectionVector, d -> lightVector, n -> normalVector (normalized)
 	glm::vec3 reflectionVector;
-	reflectionVector =  glm::normalize(glm::normalize(lightVector) - (2 * glm::dot(viewVector, interpolatedNormal)) * interpolatedNormal);
-	float viewAndReflection = dot(reflectionVector, viewVector);
+	reflectionVector =  glm::normalize(glm::normalize(lightVector) - (2 * glm::dot(lightVector, interpolatedNormal)) * interpolatedNormal);
+	float viewAndReflection = glm::dot(reflectionVector, viewVector);
 	viewAndReflection = std::fmax(viewAndReflection, 0);
 	float specular = pow(viewAndReflection, 256);
 
@@ -791,7 +791,8 @@ void handleEvent(SDL_Event event, DrawingWindow &window) {
 int main(int argc, char *argv[]) {
 	DrawingWindow window = DrawingWindow(WIDTH, HEIGHT, false);
 	SDL_Event event;
-	std::string objFile = "sphere.obj";
+	std::string objFile = "cornell-box.obj";
+	// std::string objFile = "sphere.obj";
 	std::string mtlFile = "cornell-box.mtl";
 	parseFiles(objFile, mtlFile, 0.35);
 	// draw(window);
