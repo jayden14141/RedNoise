@@ -3,6 +3,7 @@
 #include <iostream>
 #include <fstream>
 #include <vector>
+#include <cstring>
 #include "SDL.h"
 
 class DrawingWindow {

@@ -25,6 +25,7 @@ glm::mat3 cameraOrientation = glm::mat3(1.0);
 bool orbits = false;
 bool lightMove = false;
 int draw_mode = 2;
+int light_mode = 2;
 float camDegree = 0;
 // glm::vec3 light(0.2, 0.95, -0.18);
 glm::vec3 light(0, 0, 0.7);
@@ -547,7 +548,7 @@ float flatLighting(RayTriangleIntersection &rti) {
 
 	// Diffuse Lighting
 	float distance = glm::length(lightVector);
-	float illuminity = 20.0 / (4 * PI * distance * distance);
+	float illuminity = 40.0 / (4 * PI * distance * distance);
 	float incidence = glm::dot(rti.intersectedTriangle.normal, glm::normalize(lightVector));
 	incidence = std::fmax(incidence, 0);
 	float diffuse = illuminity * incidence;
@@ -573,7 +574,7 @@ float gouraudLighting(RayTriangleIntersection &rti) {
 
 	// Diffuse Lighting
 	float distance = glm::length(lightVector);
-	float illuminity = 20.0 / (4 * PI * distance * distance);
+	float illuminity = 40.0 / (4 * PI * distance * distance);
 	float incidence = 0;
 	for (int i = 0; i < 3; i++) {
 		incidence += weight[i] * glm::dot(vN[i], glm::normalize(lightVector));
@@ -596,6 +597,43 @@ float gouraudLighting(RayTriangleIntersection &rti) {
 	return brightness;
 }
 
+float phongLighting(RayTriangleIntersection &rti) {
+	std::vector<glm::vec3> vN = vertexNormal(rti);
+	glm::vec3 weight = barycentric(rti);
+	glm::vec3 lightVector = light - rti.intersectionPoint;
+
+	// Diffuse Lighting
+	float distance = glm::length(lightVector);
+	float illuminity = 40.0 / (4 * PI * distance * distance);
+	float incidence = 0;
+	for (int i = 0; i < 3; i++) {
+		incidence += weight[i] * glm::dot(vN[i], glm::normalize(lightVector));
+	}
+	incidence = std::fmax(incidence, 0);
+	float diffuse = illuminity * incidence;
+
+	// Specular Lighting
+	glm::vec3 viewVector = glm::normalize(cameraPosition - rti.intersectionPoint);
+	// r = d - 2(d*n)n where r -> reflectionVector, d -> viewVector, n -> normalVector (normalized)
+	float specular = 0;
+	for (int i = 0; i < 3; i++) {
+		glm::vec3 reflectionVector = glm::normalize(glm::normalize(lightVector) - (2 * glm::dot(viewVector, vN[i])) * vN[i]);
+		float viewAndReflection = dot(reflectionVector, viewVector);
+		viewAndReflection = std::fmax(viewAndReflection, 0);
+		specular += weight[i] * pow(viewAndReflection, 256);
+	}
+
+	float brightness = diffuse + specular;
+	return brightness;
+}
+
+float lightingMode(RayTriangleIntersection &rti) {
+	if (light_mode == 0) return flatLighting(rti);
+	else if (light_mode == 1) return gouraudLighting(rti);
+	else if (light_mode == 2) return phongLighting(rti);
+	return 0.0f;
+}
+
 // Finds the closest intersection from the cameraPoisition to every pixel
 void drawRayTrace(DrawingWindow &window) {
 	for (int y = 0; y < window.height; y++) {
@@ -605,13 +643,10 @@ void drawRayTrace(DrawingWindow &window) {
 			if(rti.distanceFromCamera < std::numeric_limits<float>::infinity()) {
 				Colour c = rti.intersectedTriangle.colour;
 
-				// brightness = flatLighting(rti);
-				float brightness = gouraudLighting(rti);
+				float brightness = lightingMode(rti);
 
-				float ambiant = 0.2;
-				float threshold = 0.5;
-				brightness += ambiant;
-				brightness = std::fmax(brightness, threshold);
+				float ambiant = 0.3;
+				brightness = std::fmax(brightness, ambiant);
 				brightness = std::fmin(brightness, 1);
 
 				uint32_t colour = (255 << 24) + (int(c.red * brightness) << 16) + (int(c.green * brightness) << 8) + (int(c.blue * brightness));
@@ -645,6 +680,7 @@ void drawRayTrace(DrawingWindow &window) {
 
 void draw(DrawingWindow &window) {
 	window.clearPixels();
+
 	if (draw_mode == 0) drawWireframe(window);
 	else if (draw_mode == 1) drawRasterised(window);
 	else if (draw_mode == 2) drawRayTrace(window);
@@ -734,16 +770,37 @@ void handleEvent(SDL_Event event, DrawingWindow &window) {
 		else if (event.key.keysym.sym == SDLK_RIGHT) change_orientation(false, PI / 16);
 		else if (event.key.keysym.sym == SDLK_UP) change_orientation(true, -PI / 16);
 		else if (event.key.keysym.sym == SDLK_DOWN) change_orientation(true, PI / 16);
-		else if (event.key.keysym.sym == SDLK_1) draw_mode = 0;
-		else if (event.key.keysym.sym == SDLK_2) draw_mode = 1;
-		else if (event.key.keysym.sym == SDLK_3) draw_mode = 2;
+		else if (event.key.keysym.sym == SDLK_1) {
+			draw_mode = 0;
+			std::cout << "Changed to Wireframe drawing" << std::endl;
+		}
+		else if (event.key.keysym.sym == SDLK_2) {
+			draw_mode = 1;
+			std::cout << "Changed to Rasterised drawing" << std::endl;
+		}
+		else if (event.key.keysym.sym == SDLK_3) {
+			draw_mode = 2;
+			std::cout << "Changed to RayTrace drawing" << std::endl;
+		}
+		else if (event.key.keysym.sym == SDLK_4) {
+			light_mode = 0;
+			std::cout << "Flat lighting applied" << std::endl;
+		}
+		else if (event.key.keysym.sym == SDLK_5) {
+			light_mode = 1;
+			std::cout << "Gouraud lighting applied" << std::endl;
+		}
+		else if (event.key.keysym.sym == SDLK_6) {
+			light_mode = 2;
+			std::cout << "Phong lighting applied" << std::endl;
+		}
 		else if (event.key.keysym.sym == SDLK_o) orbits = !orbits;
 		else if (event.key.keysym.sym == SDLK_p) {
 			lightMove = !lightMove;
 			if (lightMove) {
-				std::cout << "Translation changes Light Position" << std::endl;
+				std::cout << "Translation now changes Light Position" << std::endl;
 			} else {
-				std::cout << "Translation changes Camera Position" << std::endl;
+				std::cout << "Translation now changes Camera Position" << std::endl;
 			}
 		}
 		else if (event.key.keysym.sym == SDLK_l) lookAt();
@@ -758,7 +815,7 @@ void handleEvent(SDL_Event event, DrawingWindow &window) {
 int main(int argc, char *argv[]) {
 	DrawingWindow window = DrawingWindow(WIDTH, HEIGHT, false);
 	SDL_Event event;
-	std::string objFile = "cornell-box.obj";
+	std::string objFile = "sphere.obj";
 	std::string mtlFile = "cornell-box.mtl";
 	parseFiles(objFile, mtlFile, 0.35);
 	// draw(window);
