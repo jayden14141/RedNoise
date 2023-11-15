@@ -555,7 +555,7 @@ float flatLighting(RayTriangleIntersection &rti) {
 	glm::vec3 normalVector = glm::normalize(rti.intersectedTriangle.normal);
 	// r = d - 2(d*n)n where r -> reflectionVector, d -> lightVector, n -> normalVector (normalized)
 	glm::vec3 reflectionVector = glm::normalize(glm::normalize(lightVector) - (2 * glm::dot(lightVector, normalVector)) * normalVector);
-	float viewAndReflection = dot(reflectionVector, viewVector);
+	float viewAndReflection = glm::dot(reflectionVector, viewVector);
 	viewAndReflection = std::fmax(viewAndReflection, 0);
 	float specular = pow(viewAndReflection, 256);
 
@@ -624,7 +624,7 @@ float lightingMode(RayTriangleIntersection &rti) {
 	if (light_mode == 0) return flatLighting(rti);
 	else if (light_mode == 1) return gouraudLighting(rti);
 	else if (light_mode == 2) return phongLighting(rti);
-	return 0.0f;
+	return 1.0f;
 }
 
 // Finds the closest intersection from the cameraPoisition to every pixel
@@ -637,9 +637,9 @@ void drawRayTrace(DrawingWindow &window) {
 				Colour c = rti.intersectedTriangle.colour;
 
 				float brightness = lightingMode(rti);
-
-				float ambiant = 0.3;
-				brightness = std::fmax(brightness, ambiant);
+				brightness = std::fmax(brightness, 0);
+				float ambiant = 0.2;
+				brightness += ambiant;
 				brightness = std::fmin(brightness, 1);
 
 				uint32_t colour = (255 << 24) + (int(c.red * brightness) << 16) + (int(c.green * brightness) << 8) + (int(c.blue * brightness));
