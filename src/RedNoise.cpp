@@ -27,6 +27,7 @@ bool lightMove = false;
 int draw_mode = 2;
 int light_mode = 2;
 glm::vec3 light(0, 0, 0.7);
+std::vector<glm::vec3> lights;
 
 void sort(bool yAxis, CanvasTriangle &t) {
 	if (yAxis) {
@@ -42,6 +43,41 @@ void sort(bool yAxis, CanvasTriangle &t) {
 
 bool compareVertices(glm::vec3 &v1, glm::vec3 &v2) {
 	return ((v1.x == v2.x) && (v1.y == v2.y) && (v1.z == v2.z));
+}
+
+void initialize_lights() {
+	float radius = 10.0f;
+		for (int j = 1; j <= 16; j++) {
+			for (int i = 0; i < 8; i++) {
+			float angle = PI / 4;
+			float x = light.x + j * radius * glm::cos(i * angle);
+			float y = light.y + j * radius * glm::sin(i * angle);
+			float z = light.z;
+			lights.push_back(glm::vec3(x,y,z));
+			}
+		}
+}
+
+// Adds/deletes 8 lightsource having the 'light' as the core
+void change_lightSize(bool expand) {
+	if (expand) {
+		int steps = (lights.size() - 1) / 8;
+		float radius = (steps + 1) * 10.0f;
+		for (int i = 0; i < 8; i++) {
+			float angle = PI / 4;
+			float x = light.x + radius * glm::cos(i * angle);
+			float y = light.y + radius * glm::sin(i * angle);
+			float z = light.z;
+			lights.push_back(glm::vec3(x,y,z));
+		}
+		
+	} else {
+		if (lights.size() > 1) {
+			for (int i = 0; i < 8; i++) {
+				lights.pop_back();
+			}
+		}
+	}
 }
 
 void change_orientation(bool x_axis, float degree) {
@@ -76,32 +112,63 @@ void rotate_camera(bool x_axis, float degree) {
 	cameraPosition = cameraPosition * m;
 }
 
-// Translates either camera poisition or light position depending on 'lightMove' variable
-void translate(glm::vec3 &what, int where, bool positive) {
+void translate_light(int where, bool positive) {
 
 	//translate by x
 	if (where == 0) {
 		if (positive) {
-			what += glm::vec3(0.2, 0, 0);
+			light += glm::vec3(0.2, 0, 0);
+			for (glm::vec3 l : lights) l += glm::vec3(0.2, 0, 0);
 		} else {
-			what -= glm::vec3(0.2, 0, 0);
+			light -= glm::vec3(0.2, 0, 0);
+			for (glm::vec3 l : lights) l -= glm::vec3(0.2, 0, 0);
 		}
 	//translate by y
 	} else if (where == 1) {
 		if (positive) {
-			what += glm::vec3(0, 0.2, 0);
+			light += glm::vec3(0, 0.2, 0);
+			for (glm::vec3 l : lights) l += glm::vec3(0, 0.2, 0);
 		} else {
-			what -= glm::vec3(0, 0.2, 0);
+			light -= glm::vec3(0, 0.2, 0);
+			for (glm::vec3 l : lights) l -= glm::vec3(0, 0.2, 0);
 		}
 	//translate by z
 	} else {
 		if (positive) {
-			what += glm::vec3(0, 0, 0.2);
+			light += glm::vec3(0, 0, 0.2);
+			for (glm::vec3 l : lights) l += glm::vec3(0, 0, 0.2);
 		} else {
-			what -= glm::vec3(0, 0, 0.2);
+			light -= glm::vec3(0, 0, 0.2);
+			for (glm::vec3 l : lights) l += glm::vec3(0, 0, 0.2);
 		}
 	}
 	std::cout << light.x << ", " << light.y << ", " << light.z << std::endl;
+}
+
+void translate_camera(int where, bool positive) {
+
+	//translate by x
+	if (where == 0) {
+		if (positive) {
+			cameraPosition += glm::vec3(0.2, 0, 0);
+		} else {
+			cameraPosition -= glm::vec3(0.2, 0, 0);
+		}
+	//translate by y
+	} else if (where == 1) {
+		if (positive) {
+			cameraPosition += glm::vec3(0, 0.2, 0);
+		} else {
+			cameraPosition -= glm::vec3(0, 0.2, 0);
+		}
+	//translate by z
+	} else {
+		if (positive) {
+			cameraPosition += glm::vec3(0, 0, 0.2);
+		} else {
+			cameraPosition -= glm::vec3(0, 0, 0.2);
+		}
+	}
 }
 
 void lookAt() {
@@ -481,9 +548,9 @@ RayTriangleIntersection getClosestIntersection (glm::vec3 &rayDirection) {
 }
 
 // Checking whether the rti.intersectionPoint is a shadow
-bool is_shadow (RayTriangleIntersection rti) {
+bool is_shadow (glm::vec3 lightSource, RayTriangleIntersection rti) {
 
-	glm::vec3 lightDirection = light - rti.intersectionPoint;
+	glm::vec3 lightDirection = lightSource - rti.intersectionPoint;
 	float length = glm::length(lightDirection);
 
 	int index = 0;
@@ -540,8 +607,8 @@ void drawRasterised(DrawingWindow &window) {
 	orbit();
 }
 
-float flatLighting(RayTriangleIntersection &rti) {
-	glm::vec3 lightVector = light - rti.intersectionPoint;
+float flatLighting(glm::vec3 lightSource, RayTriangleIntersection &rti) {
+	glm::vec3 lightVector = lightSource - rti.intersectionPoint;
 
 	// Diffuse Lighting
 	float distance = glm::length(lightVector);
@@ -564,10 +631,10 @@ float flatLighting(RayTriangleIntersection &rti) {
 	return brightness;
 }
 
-float gouraudLighting(RayTriangleIntersection &rti) {
+float gouraudLighting(glm::vec3 lightSource, RayTriangleIntersection &rti) {
 	std::vector<glm::vec3> vN = vertexNormal(rti);
 	glm::vec3 weight = barycentric(rti);
-	glm::vec3 lightVector = light - rti.intersectionPoint;
+	glm::vec3 lightVector = lightSource - rti.intersectionPoint;
 
 	// Diffuse Lighting
 	float distance = glm::length(lightVector);
@@ -594,10 +661,10 @@ float gouraudLighting(RayTriangleIntersection &rti) {
 	return brightness;
 }
 
-float phongLighting(RayTriangleIntersection &rti) {
+float phongLighting(glm::vec3 lightSource, RayTriangleIntersection &rti) {
 	std::vector<glm::vec3> vN = vertexNormal(rti);
 	glm::vec3 weight = barycentric(rti);
-	glm::vec3 lightVector = light - rti.intersectionPoint;
+	glm::vec3 lightVector = lightSource - rti.intersectionPoint;
 	glm::vec3 interpolatedNormal = glm::normalize((weight.x * vN[0]) + (weight.y * vN[1]) + (weight.z * vN[2]));
 
 	// Diffuse Lighting
@@ -620,11 +687,26 @@ float phongLighting(RayTriangleIntersection &rti) {
 	return brightness;
 }
 
-float lightingMode(RayTriangleIntersection &rti) {
-	if (light_mode == 0) return flatLighting(rti);
-	else if (light_mode == 1) return gouraudLighting(rti);
-	else if (light_mode == 2) return phongLighting(rti);
+float lightingMode(glm::vec3 lightSource, RayTriangleIntersection &rti) {
+	if (light_mode == 0) return flatLighting(lightSource, rti);
+	else if (light_mode == 1) return gouraudLighting(lightSource, rti);
+	else if (light_mode == 2) return phongLighting(lightSource, rti);
 	return 1.0f;
+}
+
+float soft_shadow(RayTriangleIntersection &rti) {
+	int count = 0;
+	// float scale = 0;
+	for (glm::vec3 l : lights) {
+		if (!is_shadow(l, rti)) {
+			// float singlePoint = lightingMode(l, rti);
+			// singlePoint = std::fmax(singlePoint, 0.2);
+			// singlePoint = std::fmin(singlePoint, 1);
+			// scale += singlePoint;
+			count++;
+		}
+	}
+	return (float)(count / lights.size());
 }
 
 // Finds the closest intersection from the cameraPoisition to every pixel
@@ -636,18 +718,22 @@ void drawRayTrace(DrawingWindow &window) {
 			if(rti.distanceFromCamera < std::numeric_limits<float>::infinity()) {
 				Colour c = rti.intersectedTriangle.colour;
 
-				float brightness = lightingMode(rti);
+				float brightness = lightingMode(light, rti);
 				brightness = std::fmax(brightness, 0);
 				float ambiant = 0.2;
 				brightness += ambiant;
 				brightness = std::fmin(brightness, 1);
 
 				uint32_t colour = (255 << 24) + (int(c.red * brightness) << 16) + (int(c.green * brightness) << 8) + (int(c.blue * brightness));
-				if (is_shadow(rti)) {
-					uint32_t shadow = (255 << 24) + (int(c.red * ambiant) << 16) + (int(c.green * ambiant) << 8) + (int(c.blue * ambiant));
+				if (is_shadow(light, rti)) {
+					float scale = ambiant;
+					// float factor = soft_shadow(rti);
+					uint32_t shadow = (255 << 24) + (int(c.red * scale) << 16) + (int(c.green * scale) << 8) + (int(c.blue * scale));
 					window.setPixelColour(x, y, shadow);
 				}
-				else window.setPixelColour(x, y, colour);
+				else {
+					window.setPixelColour(x, y, colour);
+				}
 			}
 		}
 	}
@@ -736,12 +822,20 @@ void handleEvent(SDL_Event event, DrawingWindow &window) {
 		else if (event.key.keysym.sym == SDLK_x) rotate_camera(false, PI / 16);
 		else if (event.key.keysym.sym == SDLK_c) rotate_camera(true, -PI / 16);
 		else if (event.key.keysym.sym == SDLK_v) rotate_camera(true, PI / 16);
-		else if (event.key.keysym.sym == SDLK_w) lightMove? translate(light, 1, true): translate(cameraPosition, 1, true);
-		else if (event.key.keysym.sym == SDLK_a) lightMove? translate(light, 0, false): translate(cameraPosition, 0, false);
-		else if (event.key.keysym.sym == SDLK_s) lightMove? translate(light, 1, false): translate(cameraPosition, 1, false);
-		else if (event.key.keysym.sym == SDLK_d) lightMove? translate(light, 0, true): translate(cameraPosition, 0, true);
-		else if (event.key.keysym.sym == SDLK_q) lightMove? translate(light, 2, true): translate(cameraPosition, 2, true);
-		else if (event.key.keysym.sym == SDLK_e) lightMove? translate(light, 2, false): translate(cameraPosition, 2, false);
+		else if (event.key.keysym.sym == SDLK_w) lightMove? translate_light(1, true): translate_camera(1, true);
+		else if (event.key.keysym.sym == SDLK_a) lightMove? translate_light(0, false): translate_camera(0, false);
+		else if (event.key.keysym.sym == SDLK_s) lightMove? translate_light(1, false): translate_camera(1, false);
+		else if (event.key.keysym.sym == SDLK_d) lightMove? translate_light(0, true): translate_camera(0, true);
+		else if (event.key.keysym.sym == SDLK_q) lightMove? translate_light(2, true): translate_camera(2, true);
+		else if (event.key.keysym.sym == SDLK_e) lightMove? translate_light(2, false): translate_camera(2, false);
+		else if (event.key.keysym.sym == SDLK_j) {
+			if (lightMove) change_lightSize(false);
+			std::cout << "Number of lights: " << lights.size() << std::endl;
+		}
+		else if (event.key.keysym.sym == SDLK_k) {
+			if (lightMove) change_lightSize(true);
+			std::cout << "Number of lights: " << lights.size() << std::endl;
+		}
 		else if (event.key.keysym.sym == SDLK_LEFT) change_orientation(false, -PI / 16);
 		else if (event.key.keysym.sym == SDLK_RIGHT) change_orientation(false, PI / 16);
 		else if (event.key.keysym.sym == SDLK_UP) change_orientation(true, -PI / 16);
@@ -795,6 +889,9 @@ int main(int argc, char *argv[]) {
 	// std::string objFile = "sphere.obj";
 	std::string mtlFile = "cornell-box.mtl";
 	parseFiles(objFile, mtlFile, 0.35);
+
+	lights.push_back(light);
+	// initialize_lights();
 	// draw(window);
 	while (true) {
 		// We MUST poll for events - otherwise the window will freeze !
