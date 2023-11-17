@@ -27,8 +27,9 @@ bool orbits = false;
 bool lightMove = false;
 int draw_mode = 2;
 int light_mode = 2;
-glm::vec3 light(0, 0, 0.7);
+glm::vec3 light(0, 0.2, 0.7);
 std::vector<glm::vec3> lights;
+bool shadow_soft = true;
 
 void sort(bool yAxis, CanvasTriangle &t) {
 	if (yAxis) {
@@ -57,13 +58,22 @@ void initialize_lights() {
 			lights.push_back(glm::vec3(x,y,z));
 			}
 		}
+		for (int j = 1; j <= 2; j++) {
+			for (int i = 0; i < 8; i++) {
+			float angle = PI / 4;
+			float x = light.x + j * radius * glm::cos(i * angle);
+			float y = light.y + j * radius * glm::sin(i * angle);
+			float z = light.z;
+			lights.push_back(glm::vec3(x,y,z));
+			}
+		}
 }
 
 // Adds/deletes 8 lightsource having the 'light' as the core
 void change_lightSize(bool expand) {
 	if (expand) {
 		int steps = (lights.size() - 1) / 8;
-		float radius = (steps + 1) * 10.0f;
+		float radius = (steps + 1) * 2.0f;
 		for (int i = 0; i < 8; i++) {
 			float angle = PI / 4;
 			float x = light.x + radius * glm::cos(i * angle);
@@ -71,10 +81,17 @@ void change_lightSize(bool expand) {
 			float z = light.z + radius * glm::sin(i * angle);
 			lights.push_back(glm::vec3(x,y,z));
 		}
+		for (int i = 0; i < 8; i++) {
+			float angle = PI / 4;
+			float x = light.x + radius * glm::cos(i * angle);
+			float y = light.y + radius * glm::sin(i * angle);
+			float z = light.z;
+			lights.push_back(glm::vec3(x,y,z));
+		}
 		
 	} else {
 		if (lights.size() > 1) {
-			for (int i = 0; i < 8; i++) {
+			for (int i = 0; i < 16; i++) {
 				lights.pop_back();
 			}
 		}
@@ -613,7 +630,7 @@ float flatLighting(glm::vec3 lightSource, RayTriangleIntersection &rti) {
 
 	// Diffuse Lighting
 	float distance = glm::length(lightVector);
-	float illuminity = 40.0 / (4 * PI * distance * distance);
+	float illuminity = 30.0 / (4 * PI * distance * distance);
 	float incidence = glm::dot(rti.intersectedTriangle.normal, glm::normalize(lightVector));
 	incidence = std::fmax(incidence, 0);
 	float diffuse = illuminity * incidence;
@@ -639,7 +656,7 @@ float gouraudLighting(glm::vec3 lightSource, RayTriangleIntersection &rti) {
 
 	// Diffuse Lighting
 	float distance = glm::length(lightVector);
-	float illuminity = 40.0 / (4 * PI * distance * distance);
+	float illuminity = 30.0 / (4 * PI * distance * distance);
 	float incidence = 0;
 	for (int i = 0; i < 3; i++) {
 		incidence += weight[i] * glm::dot(vN[i], glm::normalize(lightVector));
@@ -670,7 +687,7 @@ float phongLighting(glm::vec3 lightSource, RayTriangleIntersection &rti) {
 
 	// Diffuse Lighting
 	float distance = glm::length(lightVector);
-	float illuminity = 40.0 / (4 * PI * distance * distance);
+	float illuminity = 30.0 / (4 * PI * distance * distance);
 	float incidence = glm::dot(interpolatedNormal, glm::normalize(lightVector));
 	incidence = std::fmax(incidence, 0);
 	float diffuse = illuminity * incidence;
@@ -718,30 +735,32 @@ void mirror(DrawingWindow &window, std::vector<CanvasPoint> &mirrorPoints, std::
 		glm::vec3 viewVector = glm::normalize(getDirectionVector(c));
 		glm::vec3 reflectionVector = glm::normalize(glm::normalize(viewVector) - (2 * glm::dot(viewVector, normalVector)) * normalVector);
 		RayTriangleIntersection rti_mirror = getClosestIntersection(actualPoints[index], reflectionVector);
-
+		uint32_t white = (255 << 24) + (255 << 16) + (255 << 8) + 255;
 		if (rti_mirror.distanceFromCamera < std::numeric_limits<float>::infinity()) {
 			Colour colour = rti_mirror.intersectedTriangle.colour;
 			uint32_t reflect = (255 << 24) + (colour.red << 16) + (colour.green << 8) + colour.blue;
 			window.setPixelColour(c.x, c.y, reflect);
+			window.setPixelColour(c.x, c.y, white);
 		}
 		index++;
+		// window.setPixelColour(c.x, c.y, white);
 	}
 }
 
 // Finds the closest intersection from the cameraPoisition to every pixel
 void drawRayTrace(DrawingWindow &window) {
-	// std::vector<CanvasPoint> mirrorPoints;
-	// std::vector<glm::vec3> actualPoints;
+	std::vector<CanvasPoint> mirrorPoints;
+	std::vector<glm::vec3> actualPoints;
 	for (int y = 0; y < window.height; y++) {
 		for (int x = 0; x < window.width; x++) {
 			glm::vec3 rayDirection = getDirectionVector(CanvasPoint(x,y,0));
 			RayTriangleIntersection rti = getClosestIntersection(cameraPosition, rayDirection);
 			if(rti.distanceFromCamera < std::numeric_limits<float>::infinity()) {
-				// if (compareVertices(rti.intersectedTriangle.vertices[0], mirrors[0].vertices[0]) || 
-				// 	compareVertices(rti.intersectedTriangle.vertices[0], mirrors[1].vertices[0])) {
-				// 	mirrorPoints.push_back(CanvasPoint(x,y,0));
-				// 	actualPoints.push_back(rti.intersectionPoint);
-				// }
+				if (compareVertices(rti.intersectedTriangle.vertices[0], mirrors[0].vertices[0]) || 
+					compareVertices(rti.intersectedTriangle.vertices[0], mirrors[1].vertices[0])) {
+					mirrorPoints.push_back(CanvasPoint(x,y,0));
+					actualPoints.push_back(rti.intersectionPoint);
+				}
 				Colour c = rti.intersectedTriangle.colour;
 
 				float brightness = lightingMode(light, rti);
@@ -753,8 +772,10 @@ void drawRayTrace(DrawingWindow &window) {
 				uint32_t colour = (255 << 24) + (int(c.red * brightness) << 16) + (int(c.green * brightness) << 8) + (int(c.blue * brightness));
 				if (is_shadow(light, rti)) {
 					float scale = ambiant;
-					float factor = soft_shadow(rti);
-					scale += factor;
+					if (shadow_soft) {
+						float factor = soft_shadow(rti);
+						scale += factor;
+					}
 					uint32_t shadow = (255 << 24) + (int(c.red * scale) << 16) + (int(c.green * scale) << 8) + (int(c.blue * scale));
 					window.setPixelColour(x, y, shadow);
 				}
@@ -765,7 +786,7 @@ void drawRayTrace(DrawingWindow &window) {
 		}
 		// make f 62/ 64/ 61/, f 62/ 63/ 64/ as an mirror
 	}
-	// mirror(window, mirrorPoints, actualPoints);
+	mirror(window, mirrorPoints, actualPoints);
 	orbit();
 }
 
@@ -894,6 +915,12 @@ void handleEvent(SDL_Event event, DrawingWindow &window) {
 			light_mode = 2;
 			std::cout << "Phong lighting applied" << std::endl;
 		}
+		else if (event.key.keysym.sym == SDLK_7) {
+			if (shadow_soft) std::cout << "Soft shadow off" << std::endl;
+			else std::cout << "Soft shadow on" << std::endl;
+			shadow_soft = !shadow_soft;
+		}
+
 		else if (event.key.keysym.sym == SDLK_o) orbits = !orbits;
 		else if (event.key.keysym.sym == SDLK_p) {
 			lightMove = !lightMove;
