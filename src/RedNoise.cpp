@@ -47,13 +47,13 @@ bool compareVertices(glm::vec3 &v1, glm::vec3 &v2) {
 }
 
 void initialize_lights() {
-	float radius = 10.0f;
-		for (int j = 1; j <= 16; j++) {
+	float radius = 2.0f;
+		for (int j = 1; j <= 2; j++) {
 			for (int i = 0; i < 8; i++) {
 			float angle = PI / 4;
 			float x = light.x + j * radius * glm::cos(i * angle);
-			float y = light.y + j * radius * glm::sin(i * angle);
-			float z = light.z;
+			float y = light.y;
+			float z = light.z + j * radius * glm::sin(i * angle);
 			lights.push_back(glm::vec3(x,y,z));
 			}
 		}
@@ -67,8 +67,8 @@ void change_lightSize(bool expand) {
 		for (int i = 0; i < 8; i++) {
 			float angle = PI / 4;
 			float x = light.x + radius * glm::cos(i * angle);
-			float y = light.y + radius * glm::sin(i * angle);
-			float z = light.z;
+			float y = light.y;
+			float z = light.z + radius * glm::sin(i * angle);
 			lights.push_back(glm::vec3(x,y,z));
 		}
 		
@@ -697,17 +697,17 @@ float lightingMode(glm::vec3 lightSource, RayTriangleIntersection &rti) {
 
 float soft_shadow(RayTriangleIntersection &rti) {
 	int count = 0;
-	// float scale = 0;
+	float scale = 0;
 	for (glm::vec3 &l : lights) {
 		if (!is_shadow(l, rti)) {
-			// float singlePoint = lightingMode(l, rti);
-			// singlePoint = std::fmax(singlePoint, 0.2);
-			// singlePoint = std::fmin(singlePoint, 1);
-			// scale += singlePoint;
+			float singlePoint = lightingMode(l, rti);
+			singlePoint = std::fmax(singlePoint, 0.2);
+			singlePoint = std::fmin(singlePoint, 1);
+			scale += singlePoint;
 			count++;
 		}
 	}
-	return (float)(count / lights.size());
+	return scale / count;
 }
 
 // MirrorPoints are points that are selected as a mirror and visible from the camera (not hidden)
@@ -753,7 +753,8 @@ void drawRayTrace(DrawingWindow &window) {
 				uint32_t colour = (255 << 24) + (int(c.red * brightness) << 16) + (int(c.green * brightness) << 8) + (int(c.blue * brightness));
 				if (is_shadow(light, rti)) {
 					float scale = ambiant;
-					// float factor = soft_shadow(rti);
+					float factor = soft_shadow(rti);
+					scale += factor;
 					uint32_t shadow = (255 << 24) + (int(c.red * scale) << 16) + (int(c.green * scale) << 8) + (int(c.blue * scale));
 					window.setPixelColour(x, y, shadow);
 				}
@@ -920,7 +921,7 @@ int main(int argc, char *argv[]) {
 	parseFiles(objFile, mtlFile, 0.35);
 
 	lights.push_back(light);
-	// initialize_lights();
+	initialize_lights();
 	// draw(window);
 	while (true) {
 		// We MUST poll for events - otherwise the window will freeze !
