@@ -19,6 +19,7 @@
 
 std::map<std::string, Colour> colourMap;
 std::vector<ModelTriangle> modelTriangles;
+std::vector<ModelTriangle> mirrors;
 glm::vec3 cameraPosition = glm::vec3(0.0, 0.0, 6.0);
 float focalLength = 2.0;
 glm::mat3 cameraOrientation = glm::mat3(1.0);
@@ -508,7 +509,7 @@ glm::vec3 getDirectionVector(CanvasPoint canvasPosition) {
 	return glm::normalize(glm::vec3(dX, dY, dZ));
 }
 
-RayTriangleIntersection getClosestIntersection (glm::vec3 &rayDirection) {
+RayTriangleIntersection getClosestIntersection (glm::vec3 &source, glm::vec3 &rayDirection) {
 	RayTriangleIntersection rti;
 	rti.distanceFromCamera = std::numeric_limits<float>::infinity();
 	rayDirection = cameraOrientation * rayDirection;
@@ -517,7 +518,7 @@ RayTriangleIntersection getClosestIntersection (glm::vec3 &rayDirection) {
 	for (ModelTriangle mT : modelTriangles) {
 		glm::vec3 e0 = mT.vertices[1] - mT.vertices[0];
 		glm::vec3 e1 = mT.vertices[2] - mT.vertices[0];
-		glm::vec3 spVector = cameraPosition - mT.vertices[0];
+		glm::vec3 spVector = source - mT.vertices[0];
 		glm::mat3 deMatrix(-rayDirection, e0, e1);
 		glm::vec3 possibleSol = glm::inverse(deMatrix) * spVector;
 		float t = possibleSol[0];
@@ -577,7 +578,7 @@ bool is_shadow (glm::vec3 lightSource, RayTriangleIntersection rti) {
 
 void drawWireframe(DrawingWindow &window) {
 	std::vector<std::vector<float>> depthBuffer(WIDTH, std::vector<float>(HEIGHT, 0));
-	for (ModelTriangle t : modelTriangles) {
+	for (ModelTriangle &t : modelTriangles) {
 		CanvasPoint v0 = getCanvasIntersectionPoint(cameraPosition, t.vertices[0], focalLength);
 		CanvasPoint v1 = getCanvasIntersectionPoint(cameraPosition, t.vertices[1], focalLength);
 		CanvasPoint v2 = getCanvasIntersectionPoint(cameraPosition, t.vertices[2], focalLength);
@@ -591,7 +592,7 @@ void drawWireframe(DrawingWindow &window) {
 void renderRasterised(DrawingWindow &window, float focalLength) {
 
 	std::vector<std::vector<float>> depthBuffer(WIDTH, std::vector<float>(HEIGHT, 0));
-	for (ModelTriangle t : modelTriangles) {
+	for (ModelTriangle &t : modelTriangles) {
 		CanvasPoint v0 = getCanvasIntersectionPoint(cameraPosition, t.vertices[0], focalLength);
 		CanvasPoint v1 = getCanvasIntersectionPoint(cameraPosition, t.vertices[1], focalLength);
 		CanvasPoint v2 = getCanvasIntersectionPoint(cameraPosition, t.vertices[2], focalLength);
@@ -697,7 +698,7 @@ float lightingMode(glm::vec3 lightSource, RayTriangleIntersection &rti) {
 float soft_shadow(RayTriangleIntersection &rti) {
 	int count = 0;
 	// float scale = 0;
-	for (glm::vec3 l : lights) {
+	for (glm::vec3 &l : lights) {
 		if (!is_shadow(l, rti)) {
 			// float singlePoint = lightingMode(l, rti);
 			// singlePoint = std::fmax(singlePoint, 0.2);
@@ -709,13 +710,38 @@ float soft_shadow(RayTriangleIntersection &rti) {
 	return (float)(count / lights.size());
 }
 
+// MirrorPoints are points that are selected as a mirror and visible from the camera (not hidden)
+void mirror(DrawingWindow &window, std::vector<CanvasPoint> &mirrorPoints, std::vector<glm::vec3> &actualPoints) {
+	glm::vec3 normalVector = glm::normalize(mirrors[0].normal);
+	int index = 0;
+	for (CanvasPoint &c : mirrorPoints) {
+		glm::vec3 viewVector = glm::normalize(getDirectionVector(c));
+		glm::vec3 reflectionVector = glm::normalize(glm::normalize(viewVector) - (2 * glm::dot(viewVector, normalVector)) * normalVector);
+		RayTriangleIntersection rti_mirror = getClosestIntersection(actualPoints[index], reflectionVector);
+
+		if (rti_mirror.distanceFromCamera < std::numeric_limits<float>::infinity()) {
+			Colour colour = rti_mirror.intersectedTriangle.colour;
+			uint32_t reflect = (255 << 24) + (colour.red << 16) + (colour.green << 8) + colour.blue;
+			window.setPixelColour(c.x, c.y, reflect);
+		}
+		index++;
+	}
+}
+
 // Finds the closest intersection from the cameraPoisition to every pixel
 void drawRayTrace(DrawingWindow &window) {
+	// std::vector<CanvasPoint> mirrorPoints;
+	// std::vector<glm::vec3> actualPoints;
 	for (int y = 0; y < window.height; y++) {
 		for (int x = 0; x < window.width; x++) {
 			glm::vec3 rayDirection = getDirectionVector(CanvasPoint(x,y,0));
-			RayTriangleIntersection rti = getClosestIntersection(rayDirection);
+			RayTriangleIntersection rti = getClosestIntersection(cameraPosition, rayDirection);
 			if(rti.distanceFromCamera < std::numeric_limits<float>::infinity()) {
+				// if (compareVertices(rti.intersectedTriangle.vertices[0], mirrors[0].vertices[0]) || 
+				// 	compareVertices(rti.intersectedTriangle.vertices[0], mirrors[1].vertices[0])) {
+				// 	mirrorPoints.push_back(CanvasPoint(x,y,0));
+				// 	actualPoints.push_back(rti.intersectionPoint);
+				// }
 				Colour c = rti.intersectedTriangle.colour;
 
 				float brightness = lightingMode(light, rti);
@@ -736,7 +762,9 @@ void drawRayTrace(DrawingWindow &window) {
 				}
 			}
 		}
+		// make f 62/ 64/ 61/, f 62/ 63/ 64/ as an mirror
 	}
+	// mirror(window, mirrorPoints, actualPoints);
 	orbit();
 }
 
@@ -801,6 +829,7 @@ std::vector<ModelTriangle> parseObj (const std::string &filename, std::map<std::
 				ModelTriangle m = ModelTriangle(vertices[facet[0]], vertices[facet[1]], vertices[facet[2]], currentColour);
 				m.normal = glm::normalize(glm::cross(m.vertices[1] - m.vertices[0], m.vertices[2] - m.vertices[0]));
 				mT.push_back(m);
+				if (facet[0] == 62) mirrors.push_back(m);
 			} else {
 				continue;
 			}
