@@ -48,7 +48,7 @@ bool compareVertices(glm::vec3 &v1, glm::vec3 &v2) {
 }
 
 void initialize_lights() {
-	float radius = 2.0f;
+	float radius = 1.0f;
 		for (int j = 1; j <= 2; j++) {
 			for (int i = 0; i < 8; i++) {
 			float angle = PI / 4;
@@ -73,7 +73,7 @@ void initialize_lights() {
 void change_lightSize(bool expand) {
 	if (expand) {
 		int steps = (lights.size() - 1) / 8;
-		float radius = (steps + 1) * 2.0f;
+		float radius = (steps + 1) * 1.0f;
 		for (int i = 0; i < 8; i++) {
 			float angle = PI / 4;
 			float x = light.x + radius * glm::cos(i * angle);
@@ -488,7 +488,7 @@ std::vector<glm::vec3> vertexNormal(RayTriangleIntersection &rti) {
 			}
 		}
 		v /= (float)count;
-		glm::normalize(v);
+		v = glm::normalize(v);
 		vertexNormals.push_back(v);
 	}
 	return vertexNormals;
@@ -623,7 +623,7 @@ void drawRasterised(DrawingWindow &window) {
 	orbit();
 }
 
-float flatLighting(glm::vec3 lightSource, RayTriangleIntersection &rti) {
+glm::vec2 flatLighting(glm::vec3 lightSource, RayTriangleIntersection &rti) {
 	glm::vec3 lightVector = lightSource - rti.intersectionPoint;
 
 	// Diffuse Lighting
@@ -637,17 +637,15 @@ float flatLighting(glm::vec3 lightSource, RayTriangleIntersection &rti) {
 	glm::vec3 viewVector = glm::normalize(cameraPosition - rti.intersectionPoint);
 	glm::vec3 normalVector = glm::normalize(rti.intersectedTriangle.normal);
 	// r = d - 2(d*n)n where r -> reflectionVector, d -> lightVector, n -> normalVector (normalized)
-	glm::vec3 reflectionVector = glm::normalize(lightVector) - (2 * glm::dot(lightVector, normalVector)) * normalVector;
+	glm::vec3 reflectionVector = glm::normalize(glm::normalize(-lightVector) - (2 * glm::dot(-lightVector, normalVector)) * normalVector);
 	float viewAndReflection = glm::dot(reflectionVector, viewVector);
 	viewAndReflection = std::fmax(viewAndReflection, 0);
 	float specular = pow(viewAndReflection, 256);
 
-	float brightness = diffuse + specular;
-
-	return brightness;
+	return glm::vec2(diffuse, specular);
 }
 
-float gouraudLighting(glm::vec3 lightSource, RayTriangleIntersection &rti) {
+glm::vec2 gouraudLighting(glm::vec3 lightSource, RayTriangleIntersection &rti) {
 	std::vector<glm::vec3> vN = vertexNormal(rti);
 	glm::vec3 weight = barycentric(rti);
 	glm::vec3 lightVector = lightSource - rti.intersectionPoint;
@@ -667,17 +665,16 @@ float gouraudLighting(glm::vec3 lightSource, RayTriangleIntersection &rti) {
 	// r = d - 2(d*n)n where r -> reflectionVector, d -> lightVector, n -> normalVector (normalized)
 	float specular = 0;
 	for (int i = 0; i < 3; i++) {
-		glm::vec3 reflectionVector = glm::normalize(lightVector) - (2 * glm::dot(lightVector, vN[i])) * vN[i];
+		glm::vec3 reflectionVector = glm::normalize(glm::normalize(-lightVector) - (2 * glm::dot(-lightVector, vN[i])) * vN[i]);
 		float viewAndReflection = glm::dot(reflectionVector, viewVector);
 		viewAndReflection = std::fmax(viewAndReflection, 0);
 		specular += weight[i] * pow(viewAndReflection, 256);
 	}
 
-	float brightness = diffuse + specular;
-	return brightness;
+	return glm::vec2(diffuse, specular);
 }
 
-float phongLighting(glm::vec3 lightSource, RayTriangleIntersection &rti) {
+glm::vec2 phongLighting(glm::vec3 lightSource, RayTriangleIntersection &rti) {
 	std::vector<glm::vec3> vN = vertexNormal(rti);
 	glm::vec3 weight = barycentric(rti);
 	glm::vec3 lightVector = lightSource - rti.intersectionPoint;
@@ -694,31 +691,30 @@ float phongLighting(glm::vec3 lightSource, RayTriangleIntersection &rti) {
 	glm::vec3 viewVector = glm::normalize(cameraPosition - rti.intersectionPoint);
 	// r = d - 2(d*n)n where r -> reflectionVector, d -> lightVector, n -> normalVector (normalized)
 	glm::vec3 reflectionVector;
-	reflectionVector =  glm::normalize(lightVector) - (2 * glm::dot(lightVector, interpolatedNormal)) * interpolatedNormal;
+	reflectionVector =  glm::normalize(glm::normalize(-lightVector) - (2 * glm::dot(-lightVector, interpolatedNormal)) * interpolatedNormal);
 	float viewAndReflection = glm::dot(reflectionVector, viewVector);
 	viewAndReflection = std::fmax(viewAndReflection, 0);
 	float specular = pow(viewAndReflection, 256);
 
-	float brightness = diffuse + specular;
-	return brightness;
+	return glm::vec2(diffuse, specular);
 }
 
-float lightingMode(glm::vec3 lightSource, RayTriangleIntersection &rti) {
+glm::vec2 lightingMode(glm::vec3 lightSource, RayTriangleIntersection &rti) {
 	if (light_mode == 0) return flatLighting(lightSource, rti);
 	else if (light_mode == 1) return gouraudLighting(lightSource, rti);
 	else if (light_mode == 2) return phongLighting(lightSource, rti);
-	return 1.0f;
+	return glm::vec2(0,0);
 }
 
 float soft_shadow(RayTriangleIntersection &rti) {
 	int count = 0;
-	float scale = 0;
+	float scale = 0.0f;
 	for (glm::vec3 &l : lights) {
 		if (!is_shadow(l, rti)) {
-			float singlePoint = lightingMode(l, rti);
-			singlePoint = std::fmax(singlePoint, 0.2);
-			singlePoint = std::fmin(singlePoint, 1);
-			scale += singlePoint;
+			glm::vec2 singlePoint = lightingMode(l, rti);
+			singlePoint[0] = std::fmax(singlePoint[0], 0.0);
+			singlePoint[0] = std::fmin(singlePoint[0], 1);
+			scale += singlePoint[0];
 			count++;
 		}
 	}
@@ -763,17 +759,32 @@ void drawRayTrace(DrawingWindow &window) {
 				}
 				Colour c = rti.intersectedTriangle.colour;
 
-				float brightness = lightingMode(light, rti);
+				glm::vec2 diffuseAndSpecualar = lightingMode(light, rti);
+				float diffuse = diffuseAndSpecualar[0];
+				float specular = diffuseAndSpecualar[1];
 				float ambiant = 0.2;
-				brightness = std::fmax(brightness, ambiant);
-				brightness = std::fmin(brightness, 1);
 
-				uint32_t colour = (255 << 24) + (int(c.red * brightness) << 16) + (int(c.green * brightness) << 8) + (int(c.blue * brightness));
+				// Diffuse and ambiant contribute to the original object colour
+				float illuminity = diffuse + ambiant;
+				illuminity = std::fmin(illuminity, 1.0f);
+				glm::vec3 objColour(c.red*illuminity, c.green*illuminity, c.blue*illuminity);
+
+				// Specular lighting contribute to the light colour (white)
+				specular *= 0.1f;
+				glm::vec3 lightColour(255.0f*specular, 255.0f*specular , 255.0f*specular);
+
+				glm::vec3 finalColour = objColour + lightColour;
+				// glm::vec3 finalColour = lightColour;
+
+				for (int i = 0; i < 3; i++) finalColour[i] = std::fmin(finalColour[i], 255.0f);
+
+				uint32_t colour = (255 << 24) + (int(finalColour[0]) << 16) + (int(finalColour[1]) << 8) + (int(finalColour[2]));
+
 				if (is_shadow(light, rti)) {
 					float scale = ambiant;
 					if (shadow_soft) {
 						float factor = soft_shadow(rti);
-						scale += 0.1 * factor;
+						scale += 0.4f * factor;
 					}
 					uint32_t shadow = (255 << 24) + (int(c.red * scale) << 16) + (int(c.green * scale) << 8) + (int(c.blue * scale));
 					window.setPixelColour(x, y, shadow);
@@ -850,7 +861,7 @@ std::vector<ModelTriangle> parseObj (const std::string &filename, std::map<std::
 				ModelTriangle m = ModelTriangle(vertices[facet[0]], vertices[facet[1]], vertices[facet[2]], currentColour);
 				m.normal = glm::normalize(glm::cross(m.vertices[1] - m.vertices[0], m.vertices[2] - m.vertices[0]));
 				mT.push_back(m);
-				if (facet[0] == 62) mirrors.push_back(m);
+				// if (facet[0] == 62) mirrors.push_back(m);
 			} else {
 				continue;
 			}
