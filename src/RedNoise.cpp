@@ -135,29 +135,29 @@ void translate_light(int where, bool positive) {
 	//translate by x
 	if (where == 0) {
 		if (positive) {
-			light += glm::vec3(0.2, 0, 0);
-			for (glm::vec3 l : lights) l += glm::vec3(0.2, 0, 0);
+			light += glm::vec3(0.1, 0, 0);
+			for (glm::vec3 l : lights) l += glm::vec3(0.1, 0, 0);
 		} else {
-			light -= glm::vec3(0.2, 0, 0);
-			for (glm::vec3 l : lights) l -= glm::vec3(0.2, 0, 0);
+			light -= glm::vec3(0.1, 0, 0);
+			for (glm::vec3 l : lights) l -= glm::vec3(0.1, 0, 0);
 		}
 	//translate by y
 	} else if (where == 1) {
 		if (positive) {
-			light += glm::vec3(0, 0.2, 0);
-			for (glm::vec3 l : lights) l += glm::vec3(0, 0.2, 0);
+			light += glm::vec3(0, 0.1, 0);
+			for (glm::vec3 l : lights) l += glm::vec3(0, 0.1, 0);
 		} else {
-			light -= glm::vec3(0, 0.2, 0);
-			for (glm::vec3 l : lights) l -= glm::vec3(0, 0.2, 0);
+			light -= glm::vec3(0, 0.1, 0);
+			for (glm::vec3 l : lights) l -= glm::vec3(0, 0.1, 0);
 		}
 	//translate by z
 	} else {
 		if (positive) {
-			light += glm::vec3(0, 0, 0.2);
-			for (glm::vec3 l : lights) l += glm::vec3(0, 0, 0.2);
+			light += glm::vec3(0, 0, 0.1);
+			for (glm::vec3 l : lights) l += glm::vec3(0, 0, 0.1);
 		} else {
-			light -= glm::vec3(0, 0, 0.2);
-			for (glm::vec3 l : lights) l += glm::vec3(0, 0, 0.2);
+			light -= glm::vec3(0, 0, 0.1);
+			for (glm::vec3 l : lights) l += glm::vec3(0, 0, 0.1);
 		}
 	}
 	std::cout << light.x << ", " << light.y << ", " << light.z << std::endl;
@@ -543,7 +543,6 @@ RayTriangleIntersection getClosestIntersection (glm::vec3 &source, glm::vec3 &ra
 		float v = possibleSol[2];
 		glm::vec3 intersection = mT.vertices[0] + u*(mT.vertices[1] - mT.vertices[0]) + v*(mT.vertices[2]- mT.vertices[0]);
 
-
 		if ((u >= 0.0) && (u <= 1.0) && (v >= 0.0) && (v <= 1.0) && (u + v) <= 1.0) {
 			if (rti.distanceFromCamera > t && t >= 0) {
 				// std::string a("White");
@@ -557,7 +556,6 @@ RayTriangleIntersection getClosestIntersection (glm::vec3 &source, glm::vec3 &ra
 				rti.intersectedTriangle = mT;
 				rti.intersectionPoint = intersection;
 				rti.triangleIndex = index;
-				// std::cout << rti << std::endl;
 			}
 		}
 		index++;
@@ -630,7 +628,7 @@ float flatLighting(glm::vec3 lightSource, RayTriangleIntersection &rti) {
 
 	// Diffuse Lighting
 	float distance = glm::length(lightVector);
-	float illuminity = 30.0 / (4 * PI * distance * distance);
+	float illuminity = 25.0 / (4 * PI * distance * distance);
 	float incidence = glm::dot(rti.intersectedTriangle.normal, glm::normalize(lightVector));
 	incidence = std::fmax(incidence, 0);
 	float diffuse = illuminity * incidence;
@@ -639,7 +637,7 @@ float flatLighting(glm::vec3 lightSource, RayTriangleIntersection &rti) {
 	glm::vec3 viewVector = glm::normalize(cameraPosition - rti.intersectionPoint);
 	glm::vec3 normalVector = glm::normalize(rti.intersectedTriangle.normal);
 	// r = d - 2(d*n)n where r -> reflectionVector, d -> lightVector, n -> normalVector (normalized)
-	glm::vec3 reflectionVector = glm::normalize(glm::normalize(lightVector) - (2 * glm::dot(lightVector, normalVector)) * normalVector);
+	glm::vec3 reflectionVector = glm::normalize(lightVector) - (2 * glm::dot(lightVector, normalVector)) * normalVector;
 	float viewAndReflection = glm::dot(reflectionVector, viewVector);
 	viewAndReflection = std::fmax(viewAndReflection, 0);
 	float specular = pow(viewAndReflection, 256);
@@ -656,7 +654,7 @@ float gouraudLighting(glm::vec3 lightSource, RayTriangleIntersection &rti) {
 
 	// Diffuse Lighting
 	float distance = glm::length(lightVector);
-	float illuminity = 30.0 / (4 * PI * distance * distance);
+	float illuminity = 25.0 / (4 * PI * distance * distance);
 	float incidence = 0;
 	for (int i = 0; i < 3; i++) {
 		incidence += weight[i] * glm::dot(vN[i], glm::normalize(lightVector));
@@ -669,7 +667,7 @@ float gouraudLighting(glm::vec3 lightSource, RayTriangleIntersection &rti) {
 	// r = d - 2(d*n)n where r -> reflectionVector, d -> lightVector, n -> normalVector (normalized)
 	float specular = 0;
 	for (int i = 0; i < 3; i++) {
-		glm::vec3 reflectionVector = glm::normalize(glm::normalize(lightVector) - (2 * glm::dot(lightVector, vN[i])) * vN[i]);
+		glm::vec3 reflectionVector = glm::normalize(lightVector) - (2 * glm::dot(lightVector, vN[i])) * vN[i];
 		float viewAndReflection = glm::dot(reflectionVector, viewVector);
 		viewAndReflection = std::fmax(viewAndReflection, 0);
 		specular += weight[i] * pow(viewAndReflection, 256);
@@ -687,7 +685,7 @@ float phongLighting(glm::vec3 lightSource, RayTriangleIntersection &rti) {
 
 	// Diffuse Lighting
 	float distance = glm::length(lightVector);
-	float illuminity = 30.0 / (4 * PI * distance * distance);
+	float illuminity = 25.0 / (4 * PI * distance * distance);
 	float incidence = glm::dot(interpolatedNormal, glm::normalize(lightVector));
 	incidence = std::fmax(incidence, 0);
 	float diffuse = illuminity * incidence;
@@ -696,7 +694,7 @@ float phongLighting(glm::vec3 lightSource, RayTriangleIntersection &rti) {
 	glm::vec3 viewVector = glm::normalize(cameraPosition - rti.intersectionPoint);
 	// r = d - 2(d*n)n where r -> reflectionVector, d -> lightVector, n -> normalVector (normalized)
 	glm::vec3 reflectionVector;
-	reflectionVector =  glm::normalize(glm::normalize(lightVector) - (2 * glm::dot(lightVector, interpolatedNormal)) * interpolatedNormal);
+	reflectionVector =  glm::normalize(lightVector) - (2 * glm::dot(lightVector, interpolatedNormal)) * interpolatedNormal;
 	float viewAndReflection = glm::dot(reflectionVector, viewVector);
 	viewAndReflection = std::fmax(viewAndReflection, 0);
 	float specular = pow(viewAndReflection, 256);
@@ -737,13 +735,13 @@ void mirror(DrawingWindow &window, std::vector<CanvasPoint> &mirrorPoints, std::
 		RayTriangleIntersection rti_mirror = getClosestIntersection(actualPoints[index], reflectionVector);
 		uint32_t white = (255 << 24) + (255 << 16) + (255 << 8) + 255;
 		if (rti_mirror.distanceFromCamera < std::numeric_limits<float>::infinity()) {
-			Colour colour = rti_mirror.intersectedTriangle.colour;
-			uint32_t reflect = (255 << 24) + (colour.red << 16) + (colour.green << 8) + colour.blue;
-			window.setPixelColour(c.x, c.y, reflect);
-			window.setPixelColour(c.x, c.y, white);
+			CanvasPoint cp = getCanvasIntersectionPoint(cameraPosition, rti_mirror.intersectionPoint, focalLength);
+			uint32_t r = window.getPixelColour(cp.x, cp.y);
+			// Colour colour = rti_mirror.intersectedTriangle.colour;
+			// uint32_t reflect = (255 << 24) + (colour.red << 16) + (colour.green << 8) + colour.blue;
+			window.setPixelColour(c.x, c.y, r);
 		}
 		index++;
-		// window.setPixelColour(c.x, c.y, white);
 	}
 }
 
@@ -756,17 +754,18 @@ void drawRayTrace(DrawingWindow &window) {
 			glm::vec3 rayDirection = getDirectionVector(CanvasPoint(x,y,0));
 			RayTriangleIntersection rti = getClosestIntersection(cameraPosition, rayDirection);
 			if(rti.distanceFromCamera < std::numeric_limits<float>::infinity()) {
-				if (compareVertices(rti.intersectedTriangle.vertices[0], mirrors[0].vertices[0]) || 
+				if (mirrors.size() > 1) {
+					if (compareVertices(rti.intersectedTriangle.vertices[0], mirrors[0].vertices[0]) || 
 					compareVertices(rti.intersectedTriangle.vertices[0], mirrors[1].vertices[0])) {
-					mirrorPoints.push_back(CanvasPoint(x,y,0));
-					actualPoints.push_back(rti.intersectionPoint);
+						mirrorPoints.push_back(CanvasPoint(x,y,0));
+						actualPoints.push_back(rti.intersectionPoint);
+					}
 				}
 				Colour c = rti.intersectedTriangle.colour;
 
 				float brightness = lightingMode(light, rti);
-				brightness = std::fmax(brightness, 0);
 				float ambiant = 0.2;
-				brightness += ambiant;
+				brightness = std::fmax(brightness, ambiant);
 				brightness = std::fmin(brightness, 1);
 
 				uint32_t colour = (255 << 24) + (int(c.red * brightness) << 16) + (int(c.green * brightness) << 8) + (int(c.blue * brightness));
@@ -774,7 +773,7 @@ void drawRayTrace(DrawingWindow &window) {
 					float scale = ambiant;
 					if (shadow_soft) {
 						float factor = soft_shadow(rti);
-						scale += factor;
+						scale += 0.1 * factor;
 					}
 					uint32_t shadow = (255 << 24) + (int(c.red * scale) << 16) + (int(c.green * scale) << 8) + (int(c.blue * scale));
 					window.setPixelColour(x, y, shadow);
@@ -786,7 +785,7 @@ void drawRayTrace(DrawingWindow &window) {
 		}
 		// make f 62/ 64/ 61/, f 62/ 63/ 64/ as an mirror
 	}
-	mirror(window, mirrorPoints, actualPoints);
+	// mirror(window, mirrorPoints, actualPoints);
 	orbit();
 }
 
