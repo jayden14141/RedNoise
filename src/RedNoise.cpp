@@ -18,6 +18,7 @@
 #define PI 3.14159265358979323846
 
 std::map<std::string, Colour> colourMap;
+TextureMap tM;
 std::vector<ModelTriangle> modelTriangles;
 std::vector<ModelTriangle> mirrors;
 glm::vec3 cameraPosition = glm::vec3(0.0, 0.0, 6.0);
@@ -435,8 +436,7 @@ void filledTriangle(DrawingWindow &window, CanvasTriangle &t, Colour c, std::vec
 	fill(window, false, left, right, t[2], c, depthBuffer);
 }
 
-void textureMapping(const std::string &filename, DrawingWindow &window, CanvasTriangle texture, CanvasTriangle canvas) {
-	TextureMap tM = TextureMap(filename);
+void textureMapping(DrawingWindow &window, CanvasTriangle texture, CanvasTriangle canvas) {
 	CanvasPoint tLeft, tRight;
 
 	CanvasPoint cLeft, cRight;
@@ -458,8 +458,6 @@ void textureMapping(const std::string &filename, DrawingWindow &window, CanvasTr
 
 	fillTexture(window, tM, CanvasTriangle(texture[0], tLeft, tRight), CanvasTriangle(canvas[0], cLeft, cRight));
 	fillTexture(window, tM, CanvasTriangle(texture[2], tLeft, tRight), CanvasTriangle(canvas[2], cLeft, cRight));
-
-	// unfilledTriangle(window, canvas, Colour(255, 255, 255));
 }
 
 CanvasPoint getCanvasIntersectionPoint(glm::vec3 &cameraPosition, glm::vec3 &vertexPosition, float focalLength) {
@@ -527,11 +525,10 @@ glm::vec3 getDirectionVector(CanvasPoint canvasPosition) {
 	return glm::normalize(glm::vec3(dX, dY, dZ));
 }
 
-RayTriangleIntersection getClosestIntersection (glm::vec3 &source, glm::vec3 &rayDirection) {
+RayTriangleIntersection getClosestIntersection (glm::vec3 &source, glm::vec3 &rayDirection, bool rotate) {
 	RayTriangleIntersection rti;
 	rti.distanceFromCamera = std::numeric_limits<float>::infinity();
-	rayDirection = cameraOrientation * rayDirection;
-	
+	if (rotate) rayDirection = cameraOrientation * rayDirection;
 	int index = 0;
 	for (ModelTriangle mT : modelTriangles) {
 		glm::vec3 e0 = mT.vertices[1] - mT.vertices[0];
@@ -734,19 +731,14 @@ void mirror(DrawingWindow &window, std::vector<CanvasPoint> &mirrorPoints, std::
 		viewVector = -viewVector;
 		glm::vec3 reflectionVector = glm::normalize(glm::normalize(viewVector) - (2 * glm::dot(viewVector, normalVector)) * normalVector);
 		reflectionVector = -reflectionVector;
-		RayTriangleIntersection rti_mirror = getClosestIntersection(mirror.intersectionPoint, reflectionVector);
+		RayTriangleIntersection rti_mirror = getClosestIntersection(mirror.intersectionPoint, reflectionVector, false);
 		uint32_t white = (255 << 24) + (255 << 16) + (255 << 8) + 255;
 		uint32_t black = (255 << 24);
 		if (rti_mirror.distanceFromCamera < std::numeric_limits<float>::infinity()) {
 			CanvasPoint cp = getCanvasIntersectionPoint(cameraPosition, rti_mirror.intersectionPoint, focalLength);
 			uint32_t r = window.getPixelColour(cp.x, cp.y);
-			// Colour colour = rti_mirror.intersectedTriangle.colour;
-			// uint32_t reflect = (255 << 24) + (colour.red << 16) + (colour.green << 8) + colour.blue;
 			window.setPixelColour(c.x, c.y, r);
-			// CanvasPoint cp = getCanvasIntersectionPoint(cameraPosition, rti_mirror.intersectionPoint, focalLength);
-			// window.setPixelColour(cp.x, cp.y, black);
 		}
-		// } else window.setPixelColour(c.x, c.y, black);
 		index++;
 	}
 }
@@ -758,7 +750,7 @@ void drawRayTrace(DrawingWindow &window) {
 	for (int y = 0; y < window.height; y++) {
 		for (int x = 0; x < window.width; x++) {
 			glm::vec3 rayDirection = getDirectionVector(CanvasPoint(x,y,0));
-			RayTriangleIntersection rti = getClosestIntersection(cameraPosition, rayDirection);
+			RayTriangleIntersection rti = getClosestIntersection(cameraPosition, rayDirection, true);
 			if(rti.distanceFromCamera < std::numeric_limits<float>::infinity()) {
 				if (mirrors.size() > 1) {
 					if (compareVertices(rti.intersectedTriangle.vertices[0], mirrors[0].vertices[0]) || 
@@ -833,11 +825,22 @@ std::map<std::string, Colour> parseMtl (const std::string &filename) {
 				std::string c;
 				std::vector<std::string> s = split(nextLine, ' ');
 				c = s[1];
+				if (c == "Cobbles") {
+					std::getline(inputStream, nextLine);
+					std::vector<std::string> kd = split(nextLine, ' ');
+					Colour colour = Colour(c, 255 * std::stof(kd[1]), 255 * std::stof(kd[2]), 255 * std::stof(kd[3]));
+					colourMap.insert(std::pair<std::string, Colour>(c, colour));
 
-				std::getline(inputStream, nextLine);
-				std::vector<std::string> kd = split(nextLine, ' ');
-				Colour colour = Colour(c, 255 * std::stof(kd[1]), 255 * std::stof(kd[2]), 255 * std::stof(kd[3]));
-				colourMap.insert(std::pair<std::string, Colour>(c, colour));
+					std::getline(inputStream, nextLine);
+					std::vector<std::string> map_kd = split(nextLine, ' ');
+					std::string textureFile = map_kd[1];
+					tM = TextureMap(textureFile);
+				} else {
+					std::getline(inputStream, nextLine);
+					std::vector<std::string> kd = split(nextLine, ' ');
+					Colour colour = Colour(c, 255 * std::stof(kd[1]), 255 * std::stof(kd[2]), 255 * std::stof(kd[3]));
+					colourMap.insert(std::pair<std::string, Colour>(c, colour));
+				}
 			}
 		}
 	}
@@ -849,12 +852,13 @@ std::vector<ModelTriangle> parseObj (const std::string &filename, std::map<std::
 	std::ifstream inputStream(filename);
 	std::string nextLine;
 	std::vector<glm::vec3> vertices;
-	std::vector<std::vector<int>> facets;
+	std::vector<TexturePoint> textures;
 	std::vector<ModelTriangle> mT;
 	Colour currentColour;
 
 	// Match the index of obj file
 	vertices.push_back(glm::vec3(0,0,0));
+	textures.push_back(TexturePoint());
 
 	while(std::getline(inputStream, nextLine)) {
 		if (!nextLine.empty()) {
@@ -862,21 +866,37 @@ std::vector<ModelTriangle> parseObj (const std::string &filename, std::map<std::
 				std::vector<std::string> s = split(nextLine, ' ');
 				currentColour = cMap.at(s[1]);
 			}
-			if (nextLine.at(0) == 'v') {
+			if (nextLine.at(0) == 'v' && nextLine.at(1) != 't') {
 				std::vector<std::string> s = split(nextLine, ' ');
 				vertices.push_back(glm::vec3(sF * std::stof(s[1]), sF * std::stof(s[2]), sF * std::stof(s[3])));
+			} else if (nextLine.at(0) == 'v' && nextLine.at(1) != 't') {
+				std::vector<std::string> vt = split(nextLine, ' ');
+				TexturePoint tp = TexturePoint(std::stof(vt[1]), std::stof(vt[2]));
+				textures.push_back(tp);
 			} else if (nextLine.at(0) == 'f') {
-				std::vector<std::string> s = split(nextLine, ' ');
-				std::vector<int> facet;
-				facet.push_back(std::stoi(split(s[1], '/').at(0)));
-				facet.push_back(std::stoi(split(s[2], '/').at(0)));
-				facet.push_back(std::stoi(split(s[3], '/').at(0)));
-				// facets.push_back(facet);
-				ModelTriangle m = ModelTriangle(vertices[facet[0]], vertices[facet[1]], vertices[facet[2]], currentColour);
-				m.normal = glm::normalize(glm::cross(m.vertices[1] - m.vertices[0], m.vertices[2] - m.vertices[0]));
-				mT.push_back(m);
-				// if (facet[0] == 62) mirrors.push_back(m);
-				if (currentColour.name == "Magenta") mirrors.push_back(m);
+				if (currentColour.name == "Cobbles") {
+					std::vector<std::string> s = split(nextLine, ' ');
+					std::vector<int> facet;
+					std::vector<int> tFacet;
+					for (int i = 0; i < 3; i++) {
+						facet.push_back(std::stoi(split(s[i + 1], '/').at(0)));
+						tFacet.push_back(std::stoi(split(s[i + 1], '/').at(1)));
+					}
+					ModelTriangle m = ModelTriangle(vertices[facet[0]], vertices[facet[1]], vertices[facet[2]], currentColour);
+					m.texturePoints = {textures[tFacet[0]], textures[tFacet[1]], textures[tFacet[2]]};
+					m.normal = glm::normalize(glm::cross(m.vertices[1] - m.vertices[0], m.vertices[2] - m.vertices[0]));
+					mT.push_back(m);
+					std::cout << m << std::endl;
+				} else {
+					std::vector<std::string> s = split(nextLine, ' ');
+					std::vector<int> facet;
+					for (int i = 0; i < 3; i++) facet.push_back(std::stoi(split(s[i + 1], '/').at(0)));
+					ModelTriangle m = ModelTriangle(vertices[facet[0]], vertices[facet[1]], vertices[facet[2]], currentColour);
+					m.normal = glm::normalize(glm::cross(m.vertices[1] - m.vertices[0], m.vertices[2] - m.vertices[0]));
+					mT.push_back(m);
+					// if (facet[0] == 62) mirrors.push_back(m);
+					if (currentColour.name == "Magenta") mirrors.push_back(m);
+				}
 			} else {
 				continue;
 			}
@@ -972,9 +992,10 @@ void handleEvent(SDL_Event event, DrawingWindow &window) {
 int main(int argc, char *argv[]) {
 	DrawingWindow window = DrawingWindow(WIDTH, HEIGHT, false);
 	SDL_Event event;
-	std::string objFile = "cornell-box.obj";
+	std::string objFile = "textured-cornell-box.obj";
 	// std::string objFile = "sphere.obj";
-	std::string mtlFile = "cornell-box.mtl";
+	std::string mtlFile = "textured-cornell-box.mtl";
+	std::string textureFile = "texture.ppm";
 	parseFiles(objFile, mtlFile, 0.35);
 
 	lights.push_back(light);
