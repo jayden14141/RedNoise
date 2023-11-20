@@ -30,6 +30,7 @@ int light_mode = 2;
 glm::vec3 light(0, 0.2, 0.7);
 std::vector<glm::vec3> lights;
 bool shadow_soft = true;
+bool mirror_mode = true;
 
 void sort(bool yAxis, CanvasTriangle &t) {
 	if (yAxis) {
@@ -510,7 +511,7 @@ glm::vec3 barycentric(RayTriangleIntersection &rti) {
     float u = (d11 * d20 - d01 * d21) / size;
     float v = (d00 * d21 - d01 * d20) / size;
     float w = (float)1 - u - v;
-	return glm::vec3(w, u, v);
+	return glm::vec3(w, u, v);	
 }
 
 // Returns a directional vector from the 2D canvaspoint to the camera Position
@@ -544,7 +545,7 @@ RayTriangleIntersection getClosestIntersection (glm::vec3 &source, glm::vec3 &ra
 		glm::vec3 intersection = mT.vertices[0] + u*(mT.vertices[1] - mT.vertices[0]) + v*(mT.vertices[2]- mT.vertices[0]);
 
 		if ((u >= 0.0) && (u <= 1.0) && (v >= 0.0) && (v <= 1.0) && (u + v) <= 1.0) {
-			if (rti.distanceFromCamera > t && t >= 0) {
+			if (rti.distanceFromCamera > t ) {
 				// std::string a("White");
 				// if (a.compare(mT.colour.name) == 0) {
 				// 	for (int i = 0; i < 3; i++) {
@@ -637,8 +638,8 @@ glm::vec2 flatLighting(glm::vec3 lightSource, RayTriangleIntersection &rti) {
 	glm::vec3 viewVector = glm::normalize(cameraPosition - rti.intersectionPoint);
 	glm::vec3 normalVector = glm::normalize(rti.intersectedTriangle.normal);
 	// r = d - 2(d*n)n where r -> reflectionVector, d -> lightVector, n -> normalVector (normalized)
-	glm::vec3 reflectionVector = glm::normalize(glm::normalize(-lightVector) - (2 * glm::dot(-lightVector, normalVector)) * normalVector);
-	float viewAndReflection = glm::dot(reflectionVector, viewVector);
+	glm::vec3 reflectionVector = glm::normalize(glm::normalize(lightVector) - (2 * glm::dot(lightVector, normalVector)) * normalVector);
+	float viewAndReflection = glm::dot(-reflectionVector, viewVector);
 	viewAndReflection = std::fmax(viewAndReflection, 0);
 	float specular = pow(viewAndReflection, 256);
 
@@ -665,8 +666,8 @@ glm::vec2 gouraudLighting(glm::vec3 lightSource, RayTriangleIntersection &rti) {
 	// r = d - 2(d*n)n where r -> reflectionVector, d -> lightVector, n -> normalVector (normalized)
 	float specular = 0;
 	for (int i = 0; i < 3; i++) {
-		glm::vec3 reflectionVector = glm::normalize(glm::normalize(-lightVector) - (2 * glm::dot(-lightVector, vN[i])) * vN[i]);
-		float viewAndReflection = glm::dot(reflectionVector, viewVector);
+		glm::vec3 reflectionVector = glm::normalize(glm::normalize(lightVector) - (2 * glm::dot(lightVector, vN[i])) * vN[i]);
+		float viewAndReflection = glm::dot(-reflectionVector, viewVector);
 		viewAndReflection = std::fmax(viewAndReflection, 0);
 		specular += weight[i] * pow(viewAndReflection, 256);
 	}
@@ -691,8 +692,8 @@ glm::vec2 phongLighting(glm::vec3 lightSource, RayTriangleIntersection &rti) {
 	glm::vec3 viewVector = glm::normalize(cameraPosition - rti.intersectionPoint);
 	// r = d - 2(d*n)n where r -> reflectionVector, d -> lightVector, n -> normalVector (normalized)
 	glm::vec3 reflectionVector;
-	reflectionVector =  glm::normalize(glm::normalize(-lightVector) - (2 * glm::dot(-lightVector, interpolatedNormal)) * interpolatedNormal);
-	float viewAndReflection = glm::dot(reflectionVector, viewVector);
+	reflectionVector =  glm::normalize(glm::normalize(lightVector) - (2 * glm::dot(lightVector, interpolatedNormal)) * interpolatedNormal);
+	float viewAndReflection = glm::dot(-reflectionVector, viewVector);
 	viewAndReflection = std::fmax(viewAndReflection, 0);
 	float specular = pow(viewAndReflection, 256);
 
@@ -706,37 +707,46 @@ glm::vec2 lightingMode(glm::vec3 lightSource, RayTriangleIntersection &rti) {
 	return glm::vec2(0,0);
 }
 
-float soft_shadow(RayTriangleIntersection &rti) {
+glm::vec2 soft_shadow(RayTriangleIntersection &rti) {
 	int count = 0;
-	float scale = 0.0f;
+	glm::vec2 scale(0,0);
 	for (glm::vec3 &l : lights) {
 		if (!is_shadow(l, rti)) {
 			glm::vec2 singlePoint = lightingMode(l, rti);
 			singlePoint[0] = std::fmax(singlePoint[0], 0.0);
 			singlePoint[0] = std::fmin(singlePoint[0], 1);
-			scale += singlePoint[0];
+			singlePoint[1] = std::fmax(singlePoint[1], 0.0);
+			singlePoint[1] = std::fmin(singlePoint[1], 1);
+			scale += singlePoint;
 			count++;
 		}
 	}
-	return scale / count;
+	return scale / (float)count;
 }
 
 // MirrorPoints are points that are selected as a mirror and visible from the camera (not hidden)
-void mirror(DrawingWindow &window, std::vector<CanvasPoint> &mirrorPoints, std::vector<glm::vec3> &actualPoints) {
-	glm::vec3 normalVector = glm::normalize(mirrors[0].normal);
+void mirror(DrawingWindow &window, std::vector<CanvasPoint> &mirrorPoints, std::vector<RayTriangleIntersection> &mirrorRti) {
 	int index = 0;
 	for (CanvasPoint &c : mirrorPoints) {
-		glm::vec3 viewVector = glm::normalize(getDirectionVector(c));
+		RayTriangleIntersection mirror = mirrorRti[index];
+		glm::vec3 normalVector = mirror.intersectedTriangle.normal;
+		glm::vec3 viewVector = glm::normalize(cameraPosition - mirror.intersectionPoint);
+		viewVector = -viewVector;
 		glm::vec3 reflectionVector = glm::normalize(glm::normalize(viewVector) - (2 * glm::dot(viewVector, normalVector)) * normalVector);
-		RayTriangleIntersection rti_mirror = getClosestIntersection(actualPoints[index], reflectionVector);
+		reflectionVector = -reflectionVector;
+		RayTriangleIntersection rti_mirror = getClosestIntersection(mirror.intersectionPoint, reflectionVector);
 		uint32_t white = (255 << 24) + (255 << 16) + (255 << 8) + 255;
+		uint32_t black = (255 << 24);
 		if (rti_mirror.distanceFromCamera < std::numeric_limits<float>::infinity()) {
 			CanvasPoint cp = getCanvasIntersectionPoint(cameraPosition, rti_mirror.intersectionPoint, focalLength);
 			uint32_t r = window.getPixelColour(cp.x, cp.y);
 			// Colour colour = rti_mirror.intersectedTriangle.colour;
 			// uint32_t reflect = (255 << 24) + (colour.red << 16) + (colour.green << 8) + colour.blue;
 			window.setPixelColour(c.x, c.y, r);
+			// CanvasPoint cp = getCanvasIntersectionPoint(cameraPosition, rti_mirror.intersectionPoint, focalLength);
+			// window.setPixelColour(cp.x, cp.y, black);
 		}
+		// } else window.setPixelColour(c.x, c.y, black);
 		index++;
 	}
 }
@@ -744,7 +754,7 @@ void mirror(DrawingWindow &window, std::vector<CanvasPoint> &mirrorPoints, std::
 // Finds the closest intersection from the cameraPoisition to every pixel
 void drawRayTrace(DrawingWindow &window) {
 	std::vector<CanvasPoint> mirrorPoints;
-	std::vector<glm::vec3> actualPoints;
+	std::vector<RayTriangleIntersection> mirrorRti;
 	for (int y = 0; y < window.height; y++) {
 		for (int x = 0; x < window.width; x++) {
 			glm::vec3 rayDirection = getDirectionVector(CanvasPoint(x,y,0));
@@ -754,7 +764,7 @@ void drawRayTrace(DrawingWindow &window) {
 					if (compareVertices(rti.intersectedTriangle.vertices[0], mirrors[0].vertices[0]) || 
 					compareVertices(rti.intersectedTriangle.vertices[0], mirrors[1].vertices[0])) {
 						mirrorPoints.push_back(CanvasPoint(x,y,0));
-						actualPoints.push_back(rti.intersectionPoint);
+						mirrorRti.push_back(rti);
 					}
 				}
 				Colour c = rti.intersectedTriangle.colour;
@@ -770,7 +780,7 @@ void drawRayTrace(DrawingWindow &window) {
 				glm::vec3 objColour(c.red*illuminity, c.green*illuminity, c.blue*illuminity);
 
 				// Specular lighting contribute to the light colour (white)
-				specular *= 0.1f;
+				specular *= 0.2f;
 				glm::vec3 lightColour(255.0f*specular, 255.0f*specular , 255.0f*specular);
 
 				glm::vec3 finalColour = objColour + lightColour;
@@ -782,11 +792,15 @@ void drawRayTrace(DrawingWindow &window) {
 
 				if (is_shadow(light, rti)) {
 					float scale = ambiant;
+					uint32_t shadow;
 					if (shadow_soft) {
-						float factor = soft_shadow(rti);
-						scale += 0.4f * factor;
-					}
-					uint32_t shadow = (255 << 24) + (int(c.red * scale) << 16) + (int(c.green * scale) << 8) + (int(c.blue * scale));
+						glm::vec2 factor = soft_shadow(rti);
+						scale += 0.4f * factor[0];
+						factor[1] *= 0.2f;
+						uint32_t shadowLight = (255 << 24) + (int(c.red * scale) << 16) + (int(c.green * scale) << 8) + (int(c.blue * scale));
+						uint32_t shadowSpecular = (255 << 24) + (int(255 * factor[1]) << 16) + (int(255 * factor[1]) << 8) + (int(255 * factor[1]));
+						shadow = shadowLight + shadowSpecular;
+					} else shadow = (255 << 24) + (int(c.red * scale) << 16) + (int(c.green * scale) << 8) + (int(c.blue * scale));
 					window.setPixelColour(x, y, shadow);
 				}
 				else {
@@ -796,7 +810,7 @@ void drawRayTrace(DrawingWindow &window) {
 		}
 		// make f 62/ 64/ 61/, f 62/ 63/ 64/ as an mirror
 	}
-	// mirror(window, mirrorPoints, actualPoints);
+	if (mirror_mode) mirror(window, mirrorPoints, mirrorRti);
 	orbit();
 }
 
@@ -862,6 +876,7 @@ std::vector<ModelTriangle> parseObj (const std::string &filename, std::map<std::
 				m.normal = glm::normalize(glm::cross(m.vertices[1] - m.vertices[0], m.vertices[2] - m.vertices[0]));
 				mT.push_back(m);
 				// if (facet[0] == 62) mirrors.push_back(m);
+				if (currentColour.name == "Magenta") mirrors.push_back(m);
 			} else {
 				continue;
 			}
@@ -929,6 +944,11 @@ void handleEvent(SDL_Event event, DrawingWindow &window) {
 			if (shadow_soft) std::cout << "Soft shadow off" << std::endl;
 			else std::cout << "Soft shadow on" << std::endl;
 			shadow_soft = !shadow_soft;
+		}
+		else if (event.key.keysym.sym == SDLK_0) {
+			if (mirror_mode) std::cout << "Mirror off" << std::endl;
+			else std::cout << "Mirror on" << std::endl;
+			mirror_mode = !mirror_mode;
 		}
 
 		else if (event.key.keysym.sym == SDLK_o) orbits = !orbits;
