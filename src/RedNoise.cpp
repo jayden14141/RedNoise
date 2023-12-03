@@ -696,8 +696,28 @@ glm::vec2 lightingMode(glm::vec3 lightSource, RayTriangleIntersection &rti) {
 	return glm::vec2(0,0);
 }
 
+glm::vec2 soft_shadow(RayTriangleIntersection &rti) {
+	int count = 0;
+	glm::vec2 scale(0,0);
+	for (glm::vec3 &l : lights) {
+		if (!is_shadow(l, rti)) {
+			glm::vec2 singlePoint = lightingMode(l, rti);
+			singlePoint[0] = std::fmax(singlePoint[0], 0.0);
+			singlePoint[0] = std::fmin(singlePoint[0], 1);
+			singlePoint[1] = std::fmax(singlePoint[1], 0.0);
+			singlePoint[1] = std::fmin(singlePoint[1], 1);
+			scale += singlePoint;
+			count++;
+		}
+	}
+	return scale / (float)count;
+}
+
 uint32_t finalColour(RayTriangleIntersection &rti) {
 	Colour c = rti.intersectedTriangle.colour;
+	float ambiant = 0.2;
+	
+	if (!is_shadow(light,rti)) {
 
 	glm::vec2 diffuseAndSpecualar = lightingMode(light, rti);
 	float diffuse = diffuseAndSpecualar[0];
@@ -721,23 +741,23 @@ uint32_t finalColour(RayTriangleIntersection &rti) {
 
 	uint32_t colour = (255 << 24) + (int(finalColour[0]) << 16) + (int(finalColour[1]) << 8) + (int(finalColour[2]));
 	return colour;
-}
 
-glm::vec2 soft_shadow(RayTriangleIntersection &rti) {
-	int count = 0;
-	glm::vec2 scale(0,0);
-	for (glm::vec3 &l : lights) {
-		if (!is_shadow(l, rti)) {
-			glm::vec2 singlePoint = lightingMode(l, rti);
-			singlePoint[0] = std::fmax(singlePoint[0], 0.0);
-			singlePoint[0] = std::fmin(singlePoint[0], 1);
-			singlePoint[1] = std::fmax(singlePoint[1], 0.0);
-			singlePoint[1] = std::fmin(singlePoint[1], 1);
-			scale += singlePoint;
-			count++;
+	} else {
+		float scale = 0;
+		uint32_t shadow;
+		if (shadow_soft) {
+			glm::vec2 factor = soft_shadow(rti);
+			scale += 0.4f * factor[0] + ambiant;
+			factor[1] *= 0.2f;
+			uint32_t shadowLight = (255 << 24) + (int(c.red * scale) << 16) + (int(c.green * scale) << 8) + (int(c.blue * scale));
+			uint32_t shadowSpecular = (255 << 24) + (int(255 * factor[1]) << 16) + (int(255 * factor[1]) << 8) + (int(255 * factor[1]));
+			shadow = shadowLight + shadowSpecular;
+		} else {
+			scale = ambiant;
+			shadow = (255 << 24) + (int(c.red * scale) << 16) + (int(c.green * scale) << 8) + (int(c.blue * scale));
 		}
+		return shadow;
 	}
-	return scale / (float)count;
 }
 
 void glass(DrawingWindow &window, std::vector<CanvasPoint> &glassPoints, std::vector<RayTriangleIntersection> &glassRti, float air, float glass) {
@@ -763,8 +783,8 @@ void glass(DrawingWindow &window, std::vector<CanvasPoint> &glassPoints, std::ve
 		RayTriangleIntersection	rti_new = getClosestIntersection(rti_glass.intersectionPoint, finalVector);
 		if (rti_new.distanceFromCamera < std::numeric_limits<float>::infinity()) {
 			CanvasPoint cp = getCanvasIntersectionPoint(cameraPosition, rti_new.intersectionPoint, focalLength);
-			uint32_t white = (255 << 24) + (255 << 16) + (255 << 8) + 255;
-			uint32_t r = window.getPixelColour(cp.x, cp.y);
+			// uint32_t white = (255 << 24) + (255 << 16) + (255 << 8) + 255;
+			uint32_t r = finalColour(rti_new);
 			window.setPixelColour(cp.x, cp.y, r);
 		}
 		index++;
@@ -781,12 +801,7 @@ void mirror(DrawingWindow &window, std::vector<CanvasPoint> &mirrorPoints, std::
 		glm::vec3 reflectionVector = (glm::normalize(viewVector) - (2 * glm::dot(viewVector, normalVector)) * normalVector);
 		RayTriangleIntersection rti_mirror = getClosestIntersection(mirror.intersectionPoint, reflectionVector);
 
-		// uint32_t white = (255 << 24) + (255 << 16) + (255 << 8) + 255;
-		// uint32_t black = (255 << 24);
 		if (rti_mirror.distanceFromCamera < std::numeric_limits<float>::infinity()) {
-			// CanvasPoint cp = getCanvasIntersectionPoint(cameraPosition, rti_mirror.intersectionPoint, focalLength);
-			// uint32_t white = (255 << 24) + (255 << 16) + (255 << 8) + 255;
-			// uint32_t r = window.getPixelColour(cp.x, cp.y);
 			uint32_t r = finalColour(rti_mirror);
 			window.setPixelColour(c.x, c.y, r);
 		} 
@@ -803,7 +818,6 @@ void drawRayTrace(DrawingWindow &window) {
 	for (int y = 0; y < window.height; y++) {
 		for (int x = 0; x < window.width; x++) {
 			glm::vec3 rayDirection = getDirectionVector(CanvasPoint(x,y,0));
-			// if(x==0 && y==0) std::cout << rayDirection.x << ", " << rayDirection.y << ", " << rayDirection.z << std::endl;
 			RayTriangleIntersection rti = getClosestIntersection(cameraPosition, rayDirection);
 			if(rti.distanceFromCamera < std::numeric_limits<float>::infinity()) {
 				if (mirrors.size() >= 1) {
@@ -827,38 +841,14 @@ void drawRayTrace(DrawingWindow &window) {
 						glassRti.push_back(rti);
 					}
 				}
-
-				Colour c = rti.intersectedTriangle.colour;
-				float ambiant = 0.2;
-
-				if (is_shadow(light, rti)) {
-					float scale = 0;
-					uint32_t shadow;
-					if (shadow_soft) {
-						glm::vec2 factor = soft_shadow(rti);
-						scale += 0.4f * factor[0] + ambiant;
-						factor[1] *= 0.2f;
-						uint32_t shadowLight = (255 << 24) + (int(c.red * scale) << 16) + (int(c.green * scale) << 8) + (int(c.blue * scale));
-						uint32_t shadowSpecular = (255 << 24) + (int(255 * factor[1]) << 16) + (int(255 * factor[1]) << 8) + (int(255 * factor[1]));
-						shadow = shadowLight + shadowSpecular;
-					} else {
-						scale = ambiant;
-						shadow = (255 << 24) + (int(c.red * scale) << 16) + (int(c.green * scale) << 8) + (int(c.blue * scale));
-					}
-					window.setPixelColour(x, y, shadow);
-				}
-				else {
-					uint32_t colour = finalColour(rti);
-					window.setPixelColour(x, y, colour);
-				}
+				uint32_t colour = finalColour(rti);
+				window.setPixelColour(x, y, colour);
 			}
 		}
 	}
-
 	float air_refrective = 1.0f;
 	float glass_refrective = 1.4f;
 	if (glass_mode) glass(window, glassPoints, glassRti, air_refrective, glass_refrective);
-
 	if (mirror_mode) mirror(window, mirrorPoints, mirrorRti);
 	orbit();
 }
