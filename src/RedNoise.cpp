@@ -696,6 +696,33 @@ glm::vec2 lightingMode(glm::vec3 lightSource, RayTriangleIntersection &rti) {
 	return glm::vec2(0,0);
 }
 
+uint32_t finalColour(RayTriangleIntersection &rti) {
+	Colour c = rti.intersectedTriangle.colour;
+
+	glm::vec2 diffuseAndSpecualar = lightingMode(light, rti);
+	float diffuse = diffuseAndSpecualar[0];
+	float specular = diffuseAndSpecualar[1];
+	// if(x==180 && y==120) std::cout << diffuse << ", " << specular << std::endl;
+	float ambiant = 0.2;
+
+	// Diffuse and ambiant contribute to the original object colour
+	float illuminity = diffuse + ambiant;
+	illuminity = std::fmin(illuminity, 1.0f);
+	glm::vec3 objColour(c.red*illuminity, c.green*illuminity, c.blue*illuminity);
+
+	// Specular lighting contribute to the light colour (white)
+	specular *= 0.2f;
+	glm::vec3 lightColour(255.0f*specular, 255.0f*specular , 255.0f*specular);
+
+	glm::vec3 finalColour = objColour + lightColour;
+	// glm::vec3 finalColour = lightColour;
+
+	for (int i = 0; i < 3; i++) finalColour[i] = std::fmin(finalColour[i], 255.0f);
+
+	uint32_t colour = (255 << 24) + (int(finalColour[0]) << 16) + (int(finalColour[1]) << 8) + (int(finalColour[2]));
+	return colour;
+}
+
 glm::vec2 soft_shadow(RayTriangleIntersection &rti) {
 	int count = 0;
 	glm::vec2 scale(0,0);
@@ -712,28 +739,6 @@ glm::vec2 soft_shadow(RayTriangleIntersection &rti) {
 	}
 	return scale / (float)count;
 }
-
-// // Returns a vector that has the certian incidence with the normal vector, which lies in the plane created by incident and normal vector
-// glm::vec3 get_vector(glm::vec3 incident, glm::vec3 normal, float sin_theta) {
-// 	// Ensures that normal vector is same side with the refraction vector
-// 	if (glm::dot(normal, incident) > 0) normal = -normal; 
-// 	float theta = PI / 2 - asin(sin_theta);
-// 	glm::vec3 axis = glm::normalize(glm::cross(incident, normal));
-// 	glm::vec3 projection = glm::normalize((glm::dot(incident, normal) / glm::dot(normal, normal)) * normal);
-// 	if (glm::dot(incident, projection) < 0) projection = -projection;
-// 	// Rodrigues' rotation formula : vrot = v*cos(theta) + (k * v)sin(theta) + k(k.v)(1-cos(theta))
-// 	// Where v = normal, k = axis
-// 	glm::vec3 rotated = normal*cos(theta) + glm::cross(axis, normal)*sin(theta) + axis*glm::dot(axis, normal)*(1 - cos(theta));
-// 	glm::vec3 rotatedOtherSide = normal*cos(-theta) + glm::cross(axis, normal)*sin(-theta) + axis*glm::dot(axis, normal)*(1 - cos(-theta));
-// 	return (glm::dot(rotated, normal) > 0) ? glm::normalize(rotated) : glm::normalize(rotatedOtherSide);
-// }
-
-// // Returns sin value of the given two vectors (positive only)
-// float get_sin(glm::vec3 &v1, glm::vec3 &v2) {
-// 	glm::vec3 crossed = glm::cross(v1, v2);
-// 	float sin = glm::length(crossed) / (glm::length(v1) * glm::length(v2));
-// 	return std::abs(sin);
-// }
 
 void glass(DrawingWindow &window, std::vector<CanvasPoint> &glassPoints, std::vector<RayTriangleIntersection> &glassRti, float air, float glass) {
 	// sin(air) {angle of incidence} / sin (glass) {angle of refraction} = glass_index / air_index = eta
@@ -782,8 +787,7 @@ void mirror(DrawingWindow &window, std::vector<CanvasPoint> &mirrorPoints, std::
 			// CanvasPoint cp = getCanvasIntersectionPoint(cameraPosition, rti_mirror.intersectionPoint, focalLength);
 			// uint32_t white = (255 << 24) + (255 << 16) + (255 << 8) + 255;
 			// uint32_t r = window.getPixelColour(cp.x, cp.y);
-			Colour cl = rti_mirror.intersectedTriangle.colour;
-			uint32_t r = (255 << 24) + (255 << cl.red) + (255 << cl.green) + cl.blue;
+			uint32_t r = finalColour(rti_mirror);
 			window.setPixelColour(c.x, c.y, r);
 		} 
 		index++;
@@ -823,29 +827,9 @@ void drawRayTrace(DrawingWindow &window) {
 						glassRti.push_back(rti);
 					}
 				}
+
 				Colour c = rti.intersectedTriangle.colour;
-
-				glm::vec2 diffuseAndSpecualar = lightingMode(light, rti);
-				float diffuse = diffuseAndSpecualar[0];
-				float specular = diffuseAndSpecualar[1];
-				// if(x==180 && y==120) std::cout << diffuse << ", " << specular << std::endl;
 				float ambiant = 0.2;
-
-				// Diffuse and ambiant contribute to the original object colour
-				float illuminity = diffuse + ambiant;
-				illuminity = std::fmin(illuminity, 1.0f);
-				glm::vec3 objColour(c.red*illuminity, c.green*illuminity, c.blue*illuminity);
-
-				// Specular lighting contribute to the light colour (white)
-				specular *= 0.2f;
-				glm::vec3 lightColour(255.0f*specular, 255.0f*specular , 255.0f*specular);
-
-				glm::vec3 finalColour = objColour + lightColour;
-				// glm::vec3 finalColour = lightColour;
-
-				for (int i = 0; i < 3; i++) finalColour[i] = std::fmin(finalColour[i], 255.0f);
-
-				uint32_t colour = (255 << 24) + (int(finalColour[0]) << 16) + (int(finalColour[1]) << 8) + (int(finalColour[2]));
 
 				if (is_shadow(light, rti)) {
 					float scale = 0;
@@ -864,6 +848,7 @@ void drawRayTrace(DrawingWindow &window) {
 					window.setPixelColour(x, y, shadow);
 				}
 				else {
+					uint32_t colour = finalColour(rti);
 					window.setPixelColour(x, y, colour);
 				}
 			}
