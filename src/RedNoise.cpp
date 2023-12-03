@@ -760,6 +760,52 @@ uint32_t finalColour(RayTriangleIntersection &rti) {
 	}
 }
 
+// Returns a vector that has the certian incidence with the normal vector, which lies in the plane created by incident and normal vector
+glm::vec3 get_vector(glm::vec3 incident, glm::vec3 normal, float sin_theta) {
+	// Ensures that normal vector is same side with the refraction vector
+	if (glm::dot(normal, incident) > 0) normal = -normal; 
+	float theta = PI / 2 - asin(sin_theta);
+	glm::vec3 axis = glm::normalize(glm::cross(incident, normal));
+	glm::vec3 projection = glm::normalize((glm::dot(incident, normal) / glm::dot(normal, normal)) * normal);
+	if (glm::dot(incident, projection) < 0) projection = -projection;
+	// Rodrigues' rotation formula : vrot = v*cos(theta) + (k * v)sin(theta) + k(k.v)(1-cos(theta))
+	// Where v = normal, k = axis
+	glm::vec3 rotated = normal*cos(theta) + glm::cross(axis, normal)*sin(theta) + axis*glm::dot(axis, normal)*(1 - cos(theta));
+	glm::vec3 rotatedOtherSide = normal*cos(-theta) + glm::cross(axis, normal)*sin(-theta) + axis*glm::dot(axis, normal)*(1 - cos(-theta));
+	return (glm::dot(rotated, normal) > 0) ? glm::normalize(rotated) : glm::normalize(rotatedOtherSide);
+}
+
+// Returns sin value of the given two vectors (positive only)
+float get_sin(glm::vec3 &v1, glm::vec3 &v2) {
+	glm::vec3 crossed = glm::cross(v1, v2);
+	float sin = glm::length(crossed) / (glm::length(v1) * glm::length(v2));
+	return std::abs(sin);
+}
+
+// void glass(DrawingWindow &window, std::vector<CanvasPoint> &glassPoints, std::vector<RayTriangleIntersection> &glassRti, float air, float glass) {
+// 	// sin(air) {angle of incidence} / sin (glass) {angle of refraction} = glass_index / air_index = refractive_ratio 
+// 	// => 1.0f * sin(air) = 1.4f * sin(glass)
+// 	float refractive_ratio = glass/air;
+// 	int index = 0;
+// 	for (CanvasPoint &c: glassPoints) {
+// 		RayTriangleIntersection glass = glassRti[index];
+// 		glm::vec3 incidentVector = glm::normalize(glass.intersectionPoint - cameraPosition);
+// 		glm::vec3 glassNormal = glass.intersectedTriangle.normal;
+// 		float incidence_sin = get_sin(incidentVector, glassNormal);
+// 		float refraction_sin = incidence_sin / refractive_ratio;
+// 		glm::vec3 refractedVector = get_vector(incidentVector, glassNormal, refraction_sin);
+// 		RayTriangleIntersection rti_glass = getClosestIntersection(glass.intersectionPoint, refractedVector, false);
+// 		// if (rti_glass.intersectedTriangle.colour.name == glass.intersectedTriangle.colour.name) {
+// 		RayTriangleIntersection	rti_new = getClosestIntersection(rti_glass.intersectionPoint, incidentVector, false);
+// 		if (rti_new.distanceFromCamera < std::numeric_limits<float>::infinity()) {
+// 			CanvasPoint cp = getCanvasIntersectionPoint(cameraPosition, rti_new.intersectionPoint, focalLength);
+// 			uint32_t r = window.getPixelColour(cp.x, cp.y);
+// 			window.setPixelColour(c.x, c.y, r);
+// 		}
+// 		index++;
+// 	}
+// }
+
 void glass(DrawingWindow &window, std::vector<CanvasPoint> &glassPoints, std::vector<RayTriangleIntersection> &glassRti, float air, float glass) {
 	// sin(air) {angle of incidence} / sin (glass) {angle of refraction} = glass_index / air_index = eta
 	// eta = n1/n2, c = cos(t1) = -N.V(in)
@@ -772,20 +818,18 @@ void glass(DrawingWindow &window, std::vector<CanvasPoint> &glassPoints, std::ve
 		glm::vec3 glassNormal = glass.intersectedTriangle.normal;
 		float cos = abs(glm::dot(glassNormal, incidentVector));
 		glm::vec3 refractedVector = eta*incidentVector + (eta*cos - sqrt(1 - eta*eta*(1.0f - cos*cos))) * glassNormal;
-		// refractedVector = -refractedVector;
+		refractedVector = refractedVector;
 		RayTriangleIntersection rti_glass = getClosestIntersection(glass.intersectionPoint, refractedVector);
 
 		glassNormal = -glassNormal;
 		float newCos = abs(glm::dot(glassNormal, refractedVector));
 		float newEta = 1 / eta;
 		glm::vec3 finalVector = newEta*refractedVector + (newEta*newCos - sqrt(1 - newEta*newEta*(1.0f - newCos*newCos))) * glassNormal;
-		// finalVector = -finalVector;
+		finalVector = finalVector;
 		RayTriangleIntersection	rti_new = getClosestIntersection(rti_glass.intersectionPoint, finalVector);
 		if (rti_new.distanceFromCamera < std::numeric_limits<float>::infinity()) {
-			CanvasPoint cp = getCanvasIntersectionPoint(cameraPosition, rti_new.intersectionPoint, focalLength);
-			// uint32_t white = (255 << 24) + (255 << 16) + (255 << 8) + 255;
 			uint32_t r = finalColour(rti_new);
-			window.setPixelColour(cp.x, cp.y, r);
+			window.setPixelColour(c.x, c.y, r);
 		}
 		index++;
 	}
