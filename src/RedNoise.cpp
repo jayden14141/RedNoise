@@ -722,7 +722,6 @@ uint32_t finalColour(RayTriangleIntersection &rti) {
 	glm::vec2 diffuseAndSpecualar = lightingMode(light, rti);
 	float diffuse = diffuseAndSpecualar[0];
 	float specular = diffuseAndSpecualar[1];
-	// if(x==180 && y==120) std::cout << diffuse << ", " << specular << std::endl;
 	float ambiant = 0.2;
 
 	// Diffuse and ambiant contribute to the original object colour
@@ -760,97 +759,95 @@ uint32_t finalColour(RayTriangleIntersection &rti) {
 	}
 }
 
-// Returns a vector that has the certian incidence with the normal vector, which lies in the plane created by incident and normal vector
-glm::vec3 get_vector(glm::vec3 incident, glm::vec3 normal, float sin_theta) {
-	// Ensures that normal vector is same side with the refraction vector
-	if (glm::dot(normal, incident) > 0) normal = -normal; 
-	float theta = PI / 2 - asin(sin_theta);
-	glm::vec3 axis = glm::normalize(glm::cross(incident, normal));
-	glm::vec3 projection = glm::normalize((glm::dot(incident, normal) / glm::dot(normal, normal)) * normal);
-	if (glm::dot(incident, projection) < 0) projection = -projection;
-	// Rodrigues' rotation formula : vrot = v*cos(theta) + (k * v)sin(theta) + k(k.v)(1-cos(theta))
-	// Where v = normal, k = axis
-	glm::vec3 rotated = normal*cos(theta) + glm::cross(axis, normal)*sin(theta) + axis*glm::dot(axis, normal)*(1 - cos(theta));
-	glm::vec3 rotatedOtherSide = normal*cos(-theta) + glm::cross(axis, normal)*sin(-theta) + axis*glm::dot(axis, normal)*(1 - cos(-theta));
-	return (glm::dot(rotated, normal) > 0) ? glm::normalize(rotated) : glm::normalize(rotatedOtherSide);
-}
-
-// Returns sin value of the given two vectors (positive only)
-float get_sin(glm::vec3 &v1, glm::vec3 &v2) {
-	glm::vec3 crossed = glm::cross(v1, v2);
-	float sin = glm::length(crossed) / (glm::length(v1) * glm::length(v2));
-	return std::abs(sin);
-}
-
 // void glass(DrawingWindow &window, std::vector<CanvasPoint> &glassPoints, std::vector<RayTriangleIntersection> &glassRti, float air, float glass) {
-// 	// sin(air) {angle of incidence} / sin (glass) {angle of refraction} = glass_index / air_index = refractive_ratio 
-// 	// => 1.0f * sin(air) = 1.4f * sin(glass)
-// 	float refractive_ratio = glass/air;
+// 	// sin(air) {angle of incidence} / sin (glass) {angle of refraction} = glass_index / air_index = eta
+// 	// eta = n1/n2, c = cos(t1) = -N.V(in)
+// 	// V(ref) = eta * V(in) + (eta*c - sqrt(1-eta^2(1-c^2)))*N
 // 	int index = 0;
-// 	for (CanvasPoint &c: glassPoints) {
+// 	for (CanvasPoint &c : glassPoints) {
+// 		float eta = glass / air;
+
 // 		RayTriangleIntersection glass = glassRti[index];
 // 		glm::vec3 incidentVector = glm::normalize(glass.intersectionPoint - cameraPosition);
 // 		glm::vec3 glassNormal = glass.intersectedTriangle.normal;
-// 		float incidence_sin = get_sin(incidentVector, glassNormal);
-// 		float refraction_sin = incidence_sin / refractive_ratio;
-// 		glm::vec3 refractedVector = get_vector(incidentVector, glassNormal, refraction_sin);
-// 		RayTriangleIntersection rti_glass = getClosestIntersection(glass.intersectionPoint, refractedVector, false);
-// 		// if (rti_glass.intersectedTriangle.colour.name == glass.intersectedTriangle.colour.name) {
-// 		RayTriangleIntersection	rti_new = getClosestIntersection(rti_glass.intersectionPoint, incidentVector, false);
-// 		if (rti_new.distanceFromCamera < std::numeric_limits<float>::infinity()) {
-// 			CanvasPoint cp = getCanvasIntersectionPoint(cameraPosition, rti_new.intersectionPoint, focalLength);
-// 			uint32_t r = window.getPixelColour(cp.x, cp.y);
+
+// 		float updated = 1 / eta;
+// 		glm::vec3 n = -glassNormal;
+
+// 		float cos = abs(glm::dot(glassNormal, incidentVector));
+
+// 		glm::vec3 offset = 0.0000001f * n;
+// 		glm::vec3 refractedVector = eta*incidentVector + (updated*cos - sqrt(1 - updated*updated*(1.0f - cos*cos))) * n;
+// 		RayTriangleIntersection rti_glass = getClosestIntersection(glass.intersectionPoint, refractedVector);
+// 		rti_glass.intersectionPoint -= offset;
+
+// 		// Handling from glass to the air
+// 		if (rti_glass.distanceFromCamera < std::numeric_limits<float>::infinity()) {
+// 			glassNormal = -glassNormal;
+// 		float newCos = abs(glm::dot(glassNormal, refractedVector));
+// 		float newEta = 1/eta;
+// 		glm::vec3 finalVector = newEta*refractedVector - (newEta*newCos - sqrt(1 - newEta*newEta*(1.0f - newCos*newCos))) * glassNormal;
+// 		RayTriangleIntersection	rti_new = getClosestIntersection(rti_glass.intersectionPoint, incidentVector);
+// 		rti_new.intersectionPoint += offset;
+// 		uint32_t r = finalColour(rti_new);
+// 		window.setPixelColour(c.x, c.y, r);
+// 		}
+// 		else {
+// 			uint32_t r = finalColour(rti_glass);
 // 			window.setPixelColour(c.x, c.y, r);
 // 		}
 // 		index++;
 // 	}
 // }
 
-void glass(DrawingWindow &window, std::vector<CanvasPoint> &glassPoints, std::vector<RayTriangleIntersection> &glassRti, float air, float glass) {
-	// sin(air) {angle of incidence} / sin (glass) {angle of refraction} = glass_index / air_index = eta
-	// eta = n1/n2, c = cos(t1) = -N.V(in)
-	// V(ref) = eta * V(in) + (eta*c - sqrt(1-eta^2(1-c^2)))*N
-	float eta = glass / air;
-	int index = 0;
-	for (CanvasPoint &c : glassPoints) {
-		RayTriangleIntersection glass = glassRti[index];
-		glm::vec3 incidentVector = glm::normalize(glass.intersectionPoint - cameraPosition);
-		glm::vec3 glassNormal = glass.intersectedTriangle.normal;
-		float cos = abs(glm::dot(glassNormal, incidentVector));
-		glm::vec3 refractedVector = eta*incidentVector + (eta*cos - sqrt(1 - eta*eta*(1.0f - cos*cos))) * glassNormal;
-		refractedVector = refractedVector;
-		RayTriangleIntersection rti_glass = getClosestIntersection(glass.intersectionPoint, refractedVector);
+// // MirrorPoints are points that are selected as a mirror and visible from the camera (not hidden)
+// void mirror(DrawingWindow &window, std::vector<CanvasPoint> &mirrorPoints, std::vector<RayTriangleIntersection> &mirrorRti) {
+// 	int index = 0;
+// 	for (CanvasPoint &c : mirrorPoints) {
+// 		RayTriangleIntersection mirror = mirrorRti[index];
+// 		glm::vec3 normalVector = mirror.intersectedTriangle.normal;
+// 		glm::vec3 viewVector = glm::normalize(mirror.intersectionPoint - cameraPosition);
+// 		glm::vec3 reflectionVector = (glm::normalize(viewVector) - (2 * glm::dot(viewVector, normalVector)) * normalVector);
+// 		RayTriangleIntersection rti_mirror = getClosestIntersection(mirror.intersectionPoint, reflectionVector);
+// 		uint32_t r = finalColour(rti_mirror);
+// 		window.setPixelColour(c.x, c.y, r);
+// 		index++;
+// 	}
+// }
 
-		glassNormal = -glassNormal;
-		float newCos = abs(glm::dot(glassNormal, refractedVector));
-		float newEta = 1 / eta;
-		glm::vec3 finalVector = newEta*refractedVector + (newEta*newCos - sqrt(1 - newEta*newEta*(1.0f - newCos*newCos))) * glassNormal;
-		finalVector = finalVector;
-		RayTriangleIntersection	rti_new = getClosestIntersection(rti_glass.intersectionPoint, finalVector);
-		if (rti_new.distanceFromCamera < std::numeric_limits<float>::infinity()) {
-			uint32_t r = finalColour(rti_new);
-			window.setPixelColour(c.x, c.y, r);
+uint32_t projectRay(glm::vec3 &source, glm::vec3 &direction, int depth) {
+	uint32_t colour = 0;
+	RayTriangleIntersection rti = getClosestIntersection(source, direction);
+	glm::vec3 incidentVector = glm::normalize(rti.intersectionPoint - source);
+	glm::vec3 normalVector = rti.intersectedTriangle.normal;
+	if (rti.distanceFromCamera < std::numeric_limits<float>::infinity()) {
+		if (mirror_mode && rti.intersectedTriangle.colour.name == "Magenta") {
+			glm::vec3 reflectionVector = (glm::normalize(incidentVector) - (2 * glm::dot(incidentVector, normalVector)) * normalVector);
+			colour = projectRay(rti.intersectionPoint, reflectionVector, 0);
+		} else if (glass_mode && rti.intersectedTriangle.colour.name == "Red") {
+			float air = 1.0f;
+			float glass = 1.4f;
+			float eta = (glm::dot(incidentVector, normalVector) > 0) ?  air/glass : glass/air;
+            float cos = glm::clamp(glm::dot(incidentVector, normalVector), -1.0f, 1.0f);
+            // If the ray is inside the object, invert the normal
+            if (cos > 0) {
+                normalVector = -normalVector;
+            } else cos = -cos;
+            float k = 1 - eta*eta*(1-cos*cos);
+            glm::vec3 refractedVector = glm::vec3(0.0f);
+            if (k >= 0) {
+                refractedVector = eta * incidentVector + (eta * cos - sqrtf(k)) * normalVector;
+            }
+            // Total internal reflection
+            if (refractedVector == glm::vec3(0.0f)) {
+                refractedVector = incidentVector - 2 * glm::dot(incidentVector, normalVector) * normalVector;
+            }
+			rti.intersectionPoint += refractedVector * 0.001f;
+            colour = projectRay(rti.intersectionPoint, refractedVector, depth + 1);
 		}
-		index++;
+		else colour = finalColour(rti);
 	}
-}
-
-// MirrorPoints are points that are selected as a mirror and visible from the camera (not hidden)
-void mirror(DrawingWindow &window, std::vector<CanvasPoint> &mirrorPoints, std::vector<RayTriangleIntersection> &mirrorRti) {
-	int index = 0;
-	for (CanvasPoint &c : mirrorPoints) {
-		RayTriangleIntersection mirror = mirrorRti[index];
-		glm::vec3 normalVector = mirror.intersectedTriangle.normal;
-		glm::vec3 viewVector = glm::normalize(mirror.intersectionPoint - cameraPosition);
-		glm::vec3 reflectionVector = (glm::normalize(viewVector) - (2 * glm::dot(viewVector, normalVector)) * normalVector);
-		RayTriangleIntersection rti_mirror = getClosestIntersection(mirror.intersectionPoint, reflectionVector);
-
-		if (rti_mirror.distanceFromCamera < std::numeric_limits<float>::infinity()) {
-			uint32_t r = finalColour(rti_mirror);
-			window.setPixelColour(c.x, c.y, r);
-		} 
-		index++;
-	}
+	return colour;
 }
 
 // Finds the closest intersection from the cameraPoisition to every pixel
@@ -862,38 +859,10 @@ void drawRayTrace(DrawingWindow &window) {
 	for (int y = 0; y < window.height; y++) {
 		for (int x = 0; x < window.width; x++) {
 			glm::vec3 rayDirection = getDirectionVector(CanvasPoint(x,y,0));
-			RayTriangleIntersection rti = getClosestIntersection(cameraPosition, rayDirection);
-			if(rti.distanceFromCamera < std::numeric_limits<float>::infinity()) {
-				if (mirrors.size() >= 1) {
-					bool is_mirror = false;
-					for (ModelTriangle t : mirrors) {
-						is_mirror = is_mirror || compareVertices(rti.intersectedTriangle.vertices[0], t.vertices[0]);
-					}
-					if (is_mirror) {
-						RayTriangleIntersection new_rti = getClosestIntersection(cameraPosition, rayDirection);
-						mirrorPoints.push_back(CanvasPoint(x,y,0));
-						mirrorRti.push_back(new_rti);
-					}
-				}
-				if (glasses.size() >= 1) {
-					bool is_glass = false;
-					for (ModelTriangle t : glasses) {
-						is_glass = is_glass || compareVertices(rti.intersectedTriangle.vertices[0], t.vertices[0]);
-					}
-					if (is_glass) {
-						glassPoints.push_back(CanvasPoint(x,y,0));
-						glassRti.push_back(rti);
-					}
-				}
-				uint32_t colour = finalColour(rti);
-				window.setPixelColour(x, y, colour);
-			}
+			uint32_t colour = projectRay(cameraPosition, rayDirection, 0);
+			window.setPixelColour(x, y, colour);
 		}
 	}
-	float air_refrective = 1.0f;
-	float glass_refrective = 1.4f;
-	if (glass_mode) glass(window, glassPoints, glassRti, air_refrective, glass_refrective);
-	if (mirror_mode) mirror(window, mirrorPoints, mirrorRti);
 	orbit();
 }
 
