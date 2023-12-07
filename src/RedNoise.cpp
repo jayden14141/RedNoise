@@ -33,6 +33,7 @@ bool lightMove = false;
 bool shadow_soft = true;
 bool mirror_mode = true;
 bool glass_mode = true;
+bool env_mode = true;
 int draw_mode = 2;
 int light_mode = 2;
 
@@ -774,7 +775,7 @@ uint32_t projectRay(glm::vec3 &source, glm::vec3 &direction, int depth) {
 			rti.intersectionPoint += refractedVector * 0.001f;
             colour = projectRay(rti.intersectionPoint, refractedVector, depth + 1);
 		// Environment Map
-		} else if (rti.intersectedTriangle.colour.name == "White") {
+		} else if (env_mode && rti.intersectedTriangle.colour.name == "Leopard") {
 			std::vector<glm::vec3> vN = vertexNormal(rti);
 			glm::vec3 weight = barycentric(rti);
 			glm::vec3 interpolatedNormal = weight.x * vN[0] + weight.y * vN[1] + weight.z * vN[2];
@@ -964,6 +965,11 @@ void handleEvent(SDL_Event event, DrawingWindow &window) {
 			else std::cout << "Soft shadow on" << std::endl;
 			shadow_soft = !shadow_soft;
 		}
+		else if (event.key.keysym.sym == SDLK_8) {
+			if (env_mode) std::cout << "Environment Map off" << std::endl;
+			else std::cout << "Environment Map on" << std::endl;
+			env_mode = !env_mode;
+		}
 		else if (event.key.keysym.sym == SDLK_9) {
 			if (glass_mode) std::cout << "Glass off" << std::endl;
 			else std::cout << "Glass on" << std::endl;
@@ -988,8 +994,8 @@ void handleEvent(SDL_Event event, DrawingWindow &window) {
 		else if (event.key.keysym.sym == SDLK_u) unfilledTriangle(window);
 		else if (event.key.keysym.sym == SDLK_f) filledTriangle(window);
 	} else if (event.type == SDL_MOUSEBUTTONDOWN) {
-		window.savePPM("output.ppm");
-		window.saveBMP("output.bmp");
+		window.savePPM("out/output.ppm");
+		window.saveBMP("out/output.bmp");
 	}
 }
 
@@ -1002,9 +1008,8 @@ int main(int argc, char *argv[]) {
 	std::string mtlFile = "cornell-box.mtl";
 	std::string textureFile = "texture_new.ppm";
 
-	// parseFiles(cornell, mtlFile, 0.35, glm::vec3(0.f));
+	parseFiles(cornell, mtlFile, 0.35, glm::vec3(0.f));
 	parseFiles(sphere, mtlFile, 0.35, glm::vec3(0.35f, -0.57f, -0.1f));
-	// parseFiles(logo, mtlFile, 0.005, glm::vec3(-1.5f, -1.35f, 0.35f));
 
 	envMap = TextureMap(textureFile);
 	std::vector<uint32_t> m(envMap.pixels.size());
