@@ -18,22 +18,24 @@
 #define PI 3.14159265358979323846
 
 std::map<std::string, Colour> colourMap;
-TextureMap tM;
 std::vector<ModelTriangle> modelTriangles;
-std::vector<ModelTriangle> mirrors;
-std::vector<ModelTriangle> glasses;
+TextureMap envMap;
+std::vector<uint32_t> bitMap;
+
 glm::vec3 cameraPosition = glm::vec3(0.0, 0.0, 6.0);
 float focalLength = 2.0;
 glm::mat3 cameraOrientation = glm::mat3(1.0);
-bool orbits = false;
-bool lightMove = false;
-int draw_mode = 2;
-int light_mode = 2;
 glm::vec3 light(0, 0.2, 0.7);
 std::vector<glm::vec3> lights;
+
+bool orbits = false;
+bool lightMove = false;
 bool shadow_soft = true;
 bool mirror_mode = true;
 bool glass_mode = true;
+int draw_mode = 2;
+int light_mode = 2;
+
 
 void sort(bool yAxis, CanvasTriangle &t) {
 	if (yAxis) {
@@ -338,37 +340,6 @@ void fill(DrawingWindow &window, bool bottomFlat, CanvasPoint left, CanvasPoint 
 		}
 	}
 }
-
-std::vector<uint32_t> textureColour (TextureMap tm, CanvasPoint from, CanvasPoint to, int numberOfValues) {
-	std::vector<CanvasPoint> texturePoint = interpolateCanvasPoint(from, to, numberOfValues);
-	std::vector<uint32_t> colour;
-	for (int i = 0; i < numberOfValues; i++) {
-		colour.push_back(tm.pixels[round(texturePoint[i].x) + round(texturePoint[i].y) * tm.width]);
-	}
-	return colour;
-}
-
-
-// All the rake rows are passed as v1 and v2
-void fillTexture(DrawingWindow &window, TextureMap tm, CanvasTriangle texture, CanvasTriangle canvas) {
-	int numberOfRow = abs(canvas[0].y - canvas[1].y) + 1;
-
-	std::vector<CanvasPoint> c_left = interpolateCanvasPoint(canvas[0], canvas[1], numberOfRow);
-	std::vector<CanvasPoint> c_right = interpolateCanvasPoint(canvas[0], canvas[2], numberOfRow);
-
-	std::vector<CanvasPoint> t_left = interpolateCanvasPoint(texture[0], texture[1], numberOfRow);
-	std::vector<CanvasPoint> t_right = interpolateCanvasPoint(texture[0], texture[2], numberOfRow);
-	
-	for (int i = 0; i < numberOfRow; i++) {
-			int numberOfCol = round(c_right[i].x - c_left[i].x);
-			std::vector<uint32_t> colour = textureColour(tm, t_left[i], t_right[i], numberOfCol);
-			int start = round(c_left[i].x);
-			for (int j = 0; j < numberOfCol; j++) {
-				window.setPixelColour(start++, (c_left[i].y), colour[j]);
-			}
-	}
-}
-
 // Helper function that specifies left and right line within the pointer
 void leftAndRight(CanvasTriangle &t, CanvasPoint &left, CanvasPoint &right) {
 
@@ -438,30 +409,6 @@ void filledTriangle(DrawingWindow &window, CanvasTriangle &t, Colour c, std::vec
 	fill(window, false, left, right, t[2], c, depthBuffer);
 }
 
-void textureMapping(DrawingWindow &window, CanvasTriangle texture, CanvasTriangle canvas) {
-	CanvasPoint tLeft, tRight;
-
-	CanvasPoint cLeft, cRight;
-	leftAndRight(canvas, cLeft, cRight);
-	leftAndRight(texture, tLeft, tRight);
-	
-	float txDiff = texture[2].x - texture[0].x;
-	float tyDiff = texture[2].y - texture[0].y;
-	// Proportion = length from top to left(right) / length of whole side
-	float proportion = (cRight.x - canvas[0].x) / (canvas[2].x - canvas[0].x);
-	// When rake row starts(ends) in left vertex
-	if(cLeft.x == canvas[1].x) {
-		tLeft = texture[1];
-		tRight = CanvasPoint(texture[0].x + txDiff * proportion, texture[0].y + tyDiff * proportion);
-	} else {
-		tRight = texture[1];
-		tLeft = CanvasPoint(texture[0].x + txDiff * proportion, texture[1].y + tyDiff * proportion);
-	}
-
-	fillTexture(window, tM, CanvasTriangle(texture[0], tLeft, tRight), CanvasTriangle(canvas[0], cLeft, cRight));
-	fillTexture(window, tM, CanvasTriangle(texture[2], tLeft, tRight), CanvasTriangle(canvas[2], cLeft, cRight));
-}
-
 CanvasPoint getCanvasIntersectionPoint(glm::vec3 &cameraPosition, glm::vec3 &vertexPosition, float focalLength) {
 
 	glm::vec3 direction = vertexPosition - cameraPosition;
@@ -472,6 +419,7 @@ CanvasPoint getCanvasIntersectionPoint(glm::vec3 &cameraPosition, glm::vec3 &ver
 	float depth =  -direction[2];
 	return CanvasPoint(canvasX, canvasY, depth);
 }
+
 
 // Returns vectors of vertexNormals of the given RayTriangleIntersection
 std::vector<glm::vec3> vertexNormal(RayTriangleIntersection &rti) {
@@ -655,7 +603,6 @@ glm::vec2 gouraudLighting(glm::vec3 lightSource, RayTriangleIntersection &rti) {
 	for (int i = 0; i < 3; i++) {
 		glm::vec3 reflectionVector = glm::normalize(glm::normalize(lightVector) - (2 * glm::dot(lightVector, vN[i])) * vN[i]);
 		float viewAndReflection = glm::dot(-reflectionVector, viewVector);
-		// viewAndReflection = std::fmax(viewAndReflection, 0);
 		viewAndReflection = glm::clamp(viewAndReflection, 0.0f, 1.0f);
 		specular += weight[i] * pow(viewAndReflection, 256);
 	}
@@ -667,6 +614,7 @@ glm::vec2 phongLighting(glm::vec3 lightSource, RayTriangleIntersection &rti) {
 	std::vector<glm::vec3> vN = vertexNormal(rti);
 	glm::vec3 weight = barycentric(rti);
 	glm::vec3 lightVector = lightSource - rti.intersectionPoint;
+	glm::vec3 normal = glm::normalize(rti.intersectedTriangle.normal);
 	glm::vec3 interpolatedNormal = glm::normalize((weight.x * vN[0]) + (weight.y * vN[1]) + (weight.z * vN[2]));
 
 	// Diffuse Lighting
@@ -680,7 +628,7 @@ glm::vec2 phongLighting(glm::vec3 lightSource, RayTriangleIntersection &rti) {
 	glm::vec3 viewVector = glm::normalize(cameraPosition - rti.intersectionPoint);
 	// r = d - 2(d*n)n where r -> reflectionVector, d -> lightVector, n -> normalVector (normalized)
 	glm::vec3 reflectionVector;
-	reflectionVector =  glm::normalize(glm::normalize(lightVector) - (2 * glm::dot(lightVector, interpolatedNormal)) * interpolatedNormal);
+	reflectionVector =  glm::normalize(glm::normalize(lightVector) - (2 * glm::dot(lightVector, normal)) * normal);
 	float viewAndReflection = glm::dot(-reflectionVector, viewVector);
 	// viewAndReflection = std::fmax(viewAndReflection, 0);
 	viewAndReflection = glm::clamp(viewAndReflection,0.0f,1.0f);
@@ -759,61 +707,40 @@ uint32_t finalColour(RayTriangleIntersection &rti) {
 	}
 }
 
-// void glass(DrawingWindow &window, std::vector<CanvasPoint> &glassPoints, std::vector<RayTriangleIntersection> &glassRti, float air, float glass) {
-// 	// sin(air) {angle of incidence} / sin (glass) {angle of refraction} = glass_index / air_index = eta
-// 	// eta = n1/n2, c = cos(t1) = -N.V(in)
-// 	// V(ref) = eta * V(in) + (eta*c - sqrt(1-eta^2(1-c^2)))*N
-// 	int index = 0;
-// 	for (CanvasPoint &c : glassPoints) {
-// 		float eta = glass / air;
+uint32_t get_bitMap(int x, int y) {
+	int maxX = envMap.width;
+	int maxY = envMap.height;
 
-// 		RayTriangleIntersection glass = glassRti[index];
-// 		glm::vec3 incidentVector = glm::normalize(glass.intersectionPoint - cameraPosition);
-// 		glm::vec3 glassNormal = glass.intersectedTriangle.normal;
+	return bitMap[(y%maxY*envMap.height+x%maxX)];
+}
 
-// 		float updated = 1 / eta;
-// 		glm::vec3 n = -glassNormal;
+uint32_t calculateCubeMap(glm::vec3 &direction) {
+	int w = (int)round((int)envMap.width / 4);
+	int h = (int)round((int)envMap.height / 3);
 
-// 		float cos = abs(glm::dot(glassNormal, incidentVector));
+	float absX = std::abs(direction.x);
+	float absY = std::abs(direction.y);
+	float absZ = std::abs(direction.z);
 
-// 		glm::vec3 offset = 0.0000001f * n;
-// 		glm::vec3 refractedVector = eta*incidentVector + (updated*cos - sqrt(1 - updated*updated*(1.0f - cos*cos))) * n;
-// 		RayTriangleIntersection rti_glass = getClosestIntersection(glass.intersectionPoint, refractedVector);
-// 		rti_glass.intersectionPoint -= offset;
+	float m = 2.0f * sqrt(absX*absX + absY*absY + absZ*absZ);
+	float u = ((absX/m) + 0.5f) * w;
+	float v = ((absY/m) + 0.5f) * h;
 
-// 		// Handling from glass to the air
-// 		if (rti_glass.distanceFromCamera < std::numeric_limits<float>::infinity()) {
-// 			glassNormal = -glassNormal;
-// 		float newCos = abs(glm::dot(glassNormal, refractedVector));
-// 		float newEta = 1/eta;
-// 		glm::vec3 finalVector = newEta*refractedVector - (newEta*newCos - sqrt(1 - newEta*newEta*(1.0f - newCos*newCos))) * glassNormal;
-// 		RayTriangleIntersection	rti_new = getClosestIntersection(rti_glass.intersectionPoint, incidentVector);
-// 		rti_new.intersectionPoint += offset;
-// 		uint32_t r = finalColour(rti_new);
-// 		window.setPixelColour(c.x, c.y, r);
-// 		}
-// 		else {
-// 			uint32_t r = finalColour(rti_glass);
-// 			window.setPixelColour(c.x, c.y, r);
-// 		}
-// 		index++;
-// 	}
-// }
+	int x = (int)round((int)u % w);
+	int y = (int)round((int)v % h);
 
-// // MirrorPoints are points that are selected as a mirror and visible from the camera (not hidden)
-// void mirror(DrawingWindow &window, std::vector<CanvasPoint> &mirrorPoints, std::vector<RayTriangleIntersection> &mirrorRti) {
-// 	int index = 0;
-// 	for (CanvasPoint &c : mirrorPoints) {
-// 		RayTriangleIntersection mirror = mirrorRti[index];
-// 		glm::vec3 normalVector = mirror.intersectedTriangle.normal;
-// 		glm::vec3 viewVector = glm::normalize(mirror.intersectionPoint - cameraPosition);
-// 		glm::vec3 reflectionVector = (glm::normalize(viewVector) - (2 * glm::dot(viewVector, normalVector)) * normalVector);
-// 		RayTriangleIntersection rti_mirror = getClosestIntersection(mirror.intersectionPoint, reflectionVector);
-// 		uint32_t r = finalColour(rti_mirror);
-// 		window.setPixelColour(c.x, c.y, r);
-// 		index++;
-// 	}
-// }
+	if (absX > absY && absX > absZ) {
+		if (direction.x > 0) return get_bitMap(2*w+x,h+y); // Right
+		else return get_bitMap(x,h+y); // Left
+	} else if (absY > absZ) {
+		if (direction.y > 0) return get_bitMap(w+x,y); // Up
+		else return get_bitMap(w+x,2*h+y); // Down
+		
+	} else {
+		if (direction.z > 0) return get_bitMap(3*w+x,h+y); // Front
+		else return get_bitMap(w+x,h+y); // Back
+	}
+}
 
 uint32_t projectRay(glm::vec3 &source, glm::vec3 &direction, int depth) {
 	uint32_t colour = 0;
@@ -821,9 +748,11 @@ uint32_t projectRay(glm::vec3 &source, glm::vec3 &direction, int depth) {
 	glm::vec3 incidentVector = glm::normalize(rti.intersectionPoint - source);
 	glm::vec3 normalVector = rti.intersectedTriangle.normal;
 	if (rti.distanceFromCamera < std::numeric_limits<float>::infinity()) {
+		// Mirror
 		if (mirror_mode && rti.intersectedTriangle.colour.name == "Magenta") {
-			glm::vec3 reflectionVector = (glm::normalize(incidentVector) - (2 * glm::dot(incidentVector, normalVector)) * normalVector);
-			colour = projectRay(rti.intersectionPoint, reflectionVector, 0);
+			glm::vec3 reflectionVector = incidentVector - (2 * glm::dot(incidentVector, normalVector)) * normalVector;
+			colour = projectRay(rti.intersectionPoint, reflectionVector, depth + 1);
+		// Glass
 		} else if (glass_mode && rti.intersectedTriangle.colour.name == "Red") {
 			float air = 1.0f;
 			float glass = 1.4f;
@@ -844,18 +773,31 @@ uint32_t projectRay(glm::vec3 &source, glm::vec3 &direction, int depth) {
             }
 			rti.intersectionPoint += refractedVector * 0.001f;
             colour = projectRay(rti.intersectionPoint, refractedVector, depth + 1);
+		// Environment Map
+		} else if (rti.intersectedTriangle.colour.name == "White") {
+			std::vector<glm::vec3> vN = vertexNormal(rti);
+			glm::vec3 weight = barycentric(rti);
+			glm::vec3 interpolatedNormal = weight.x * vN[0] + weight.y * vN[1] + weight.z * vN[2];
+			glm::vec3 reflectionVector = incidentVector - (2 * glm::dot(incidentVector, interpolatedNormal)) * interpolatedNormal;
+			RayTriangleIntersection rti_ref = getClosestIntersection(rti.intersectionPoint, reflectionVector);
+			
+			float u = envMap.width * (0.5f + std::atan2(reflectionVector.z, reflectionVector.x) / (2.0f * PI));
+			float v = envMap.height * (0.5f - std::asin(reflectionVector.y) / PI);
+
+			int intU = (int)round(u) % (int)(envMap.width);
+			int intV = (int)round(v) % (int)(envMap.height);
+			colour = get_bitMap(intU,intV);
+
 		}
 		else colour = finalColour(rti);
+	} else if (depth != 0) {
+		colour = calculateCubeMap(direction);
 	}
 	return colour;
 }
 
 // Finds the closest intersection from the cameraPoisition to every pixel
 void drawRayTrace(DrawingWindow &window) {
-	std::vector<CanvasPoint> mirrorPoints;
-	std::vector<RayTriangleIntersection> mirrorRti;
-	std::vector<CanvasPoint> glassPoints;
-	std::vector<RayTriangleIntersection> glassRti;
 	for (int y = 0; y < window.height; y++) {
 		for (int x = 0; x < window.width; x++) {
 			glm::vec3 rayDirection = getDirectionVector(CanvasPoint(x,y,0));
@@ -894,7 +836,7 @@ std::map<std::string, Colour> parseMtl (const std::string &filename) {
 					std::getline(inputStream, nextLine);
 					std::vector<std::string> map_kd = split(nextLine, ' ');
 					std::string textureFile = map_kd[1];
-					tM = TextureMap(textureFile);
+					// tM = TextureMap(textureFile);
 				} else {
 					std::getline(inputStream, nextLine);
 					std::vector<std::string> kd = split(nextLine, ' ');
@@ -908,7 +850,7 @@ std::map<std::string, Colour> parseMtl (const std::string &filename) {
 	return colourMap;
 }
 
-std::vector<ModelTriangle> parseObj (const std::string &filename, std::map<std::string, Colour> cMap, float sF) {
+void parseObj (const std::string &filename, std::map<std::string, Colour> cMap, float sF, glm::vec3 translate) {
 	std::ifstream inputStream(filename);
 	std::string nextLine;
 	std::vector<glm::vec3> vertices;
@@ -928,7 +870,7 @@ std::vector<ModelTriangle> parseObj (const std::string &filename, std::map<std::
 			}
 			if (nextLine.at(0) == 'v' && nextLine.at(1) != 't') {
 				std::vector<std::string> s = split(nextLine, ' ');
-				vertices.push_back(glm::vec3(sF * std::stof(s[1]), sF * std::stof(s[2]), sF * std::stof(s[3])));
+				vertices.push_back(glm::vec3(sF * std::stof(s[1]) + translate.x, sF * std::stof(s[2]) + translate.y, sF * std::stof(s[3]) + translate.z));
 			} else if (nextLine.at(0) == 'v' && nextLine.at(1) != 't') {
 				std::vector<std::string> vt = split(nextLine, ' ');
 				TexturePoint tp = TexturePoint(std::stof(vt[1]), std::stof(vt[2]));
@@ -945,7 +887,7 @@ std::vector<ModelTriangle> parseObj (const std::string &filename, std::map<std::
 					ModelTriangle m = ModelTriangle(vertices[facet[0]], vertices[facet[1]], vertices[facet[2]], currentColour);
 					m.texturePoints = {textures[tFacet[0]], textures[tFacet[1]], textures[tFacet[2]]};
 					m.normal = glm::normalize(glm::cross(m.vertices[1] - m.vertices[0], m.vertices[2] - m.vertices[0]));
-					mT.push_back(m);
+					modelTriangles.push_back(m);
 					std::cout << m << std::endl;
 				} else {
 					std::vector<std::string> s = split(nextLine, ' ');
@@ -953,10 +895,7 @@ std::vector<ModelTriangle> parseObj (const std::string &filename, std::map<std::
 					for (int i = 0; i < 3; i++) facet.push_back(std::stoi(split(s[i + 1], '/').at(0)));
 					ModelTriangle m = ModelTriangle(vertices[facet[0]], vertices[facet[1]], vertices[facet[2]], currentColour);
 					m.normal = glm::normalize(glm::cross(m.vertices[1] - m.vertices[0], m.vertices[2] - m.vertices[0]));
-					mT.push_back(m);
-					// if (facet[0] == 62) mirrors.push_back(m);
-					if (currentColour.name == "Magenta") mirrors.push_back(m);
-					if (currentColour.name == "Red") glasses.push_back(m);
+					modelTriangles.push_back(m);
 				}
 			} else {
 				continue;
@@ -964,12 +903,11 @@ std::vector<ModelTriangle> parseObj (const std::string &filename, std::map<std::
 		}
 	}
 	inputStream.close();
-	return mT;
 }
 
-void parseFiles(const std::string &objFile, const std::string &mtlFile, float scalingFactor) {
+void parseFiles(const std::string &objFile, const std::string &mtlFile, float scalingFactor, glm::vec3 translate) {
 	colourMap = parseMtl(mtlFile);
-	modelTriangles = parseObj(objFile, colourMap, scalingFactor);
+	parseObj(objFile, colourMap, scalingFactor, translate);
 }
 
 
@@ -1058,12 +996,24 @@ void handleEvent(SDL_Event event, DrawingWindow &window) {
 int main(int argc, char *argv[]) {
 	DrawingWindow window = DrawingWindow(WIDTH, HEIGHT, false);
 	SDL_Event event;
-	// std::string objFile = "logo.obj";
-	// std::string objFile = "sphere.obj";
-	std::string objFile = "cornell-box.obj";
+	std::string sphere = "sphere.obj";
+	std::string cornell = "cornell-box.obj";
+	std::string logo = "logo.obj";
 	std::string mtlFile = "cornell-box.mtl";
-	std::string textureFile = "texture.ppm";
-	parseFiles(objFile, mtlFile, 0.35);
+	std::string textureFile = "texture_new.ppm";
+
+	// parseFiles(cornell, mtlFile, 0.35, glm::vec3(0.f));
+	parseFiles(sphere, mtlFile, 0.35, glm::vec3(0.35f, -0.57f, -0.1f));
+	// parseFiles(logo, mtlFile, 0.005, glm::vec3(-1.5f, -1.35f, 0.35f));
+
+	envMap = TextureMap(textureFile);
+	std::vector<uint32_t> m(envMap.pixels.size());
+	// To get pixels, y * envMap.height + x
+    for(int t = 0; t < envMap.pixels.size(); t++){
+        m[t] = envMap.pixels[t];
+    }
+	bitMap = m;
+
 
 	lights.push_back(light);
 	initialize_lights();
