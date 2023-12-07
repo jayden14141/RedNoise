@@ -12,6 +12,7 @@
 #include <vector>
 #include <glm/glm.hpp>
 #include <cmath>
+#include <sstream>
 
 #define WIDTH 320
 #define HEIGHT 240
@@ -22,7 +23,7 @@ std::vector<ModelTriangle> modelTriangles;
 TextureMap envMap;
 std::vector<uint32_t> bitMap;
 
-glm::vec3 cameraPosition = glm::vec3(0.0, 0.0, 6.0);
+glm::vec3 cameraPosition = glm::vec3(0,0,6);
 float focalLength = 2.0;
 glm::mat3 cameraOrientation = glm::mat3(1.0);
 glm::vec3 light(0, 0.2, 0.7);
@@ -36,6 +37,8 @@ bool glass_mode = true;
 bool env_mode = true;
 int draw_mode = 2;
 int light_mode = 2;
+
+int frame = 0;
 
 
 void sort(bool yAxis, CanvasTriangle &t) {
@@ -145,6 +148,7 @@ void rotate_camera(bool x_axis, float degree) {
    			sin(degree), 0, cos(degree));
 	}
 	cameraPosition = cameraPosition * m;
+	lookAt();
 }
 
 void translate_light(int where, bool positive) {
@@ -204,6 +208,7 @@ void translate_camera(int where, bool positive) {
 			cameraPosition -= glm::vec3(0, 0, 0.2);
 		}
 	}
+	std::cout << cameraPosition.x << ", " << cameraPosition.y << ", " << cameraPosition.z << std::endl;
 }
 
 void orbit() {
@@ -212,7 +217,6 @@ void orbit() {
 		lookAt();
 	}
 }
-
 // Interpolation for colour (rgb) => vec3
 std::vector<glm::vec3> interpolateThreeElementValues (glm::vec3 from, glm::vec3 to, int numberOfValues) {
 	std::vector<glm::vec3> v;
@@ -775,24 +779,24 @@ uint32_t projectRay(glm::vec3 &source, glm::vec3 &direction, int depth) {
 			rti.intersectionPoint += refractedVector * 0.001f;
             colour = projectRay(rti.intersectionPoint, refractedVector, depth + 1);
 		// Environment Map
-		} else if (env_mode && rti.intersectedTriangle.colour.name == "Leopard") {
-			std::vector<glm::vec3> vN = vertexNormal(rti);
-			glm::vec3 weight = barycentric(rti);
-			glm::vec3 interpolatedNormal = weight.x * vN[0] + weight.y * vN[1] + weight.z * vN[2];
-			glm::vec3 reflectionVector = incidentVector - (2 * glm::dot(incidentVector, interpolatedNormal)) * interpolatedNormal;
-			RayTriangleIntersection rti_ref = getClosestIntersection(rti.intersectionPoint, reflectionVector);
-			
-			float u = envMap.width * (0.5f + std::atan2(reflectionVector.z, reflectionVector.x) / (2.0f * PI));
-			float v = envMap.height * (0.5f - std::asin(reflectionVector.y) / PI);
+		} else if (rti.intersectedTriangle.colour.name == "Leopard") {
+			if (env_mode) {
+				std::vector<glm::vec3> vN = vertexNormal(rti);
+				glm::vec3 weight = barycentric(rti);
+				glm::vec3 interpolatedNormal = weight.x * vN[0] + weight.y * vN[1] + weight.z * vN[2];
+				glm::vec3 reflectionVector = incidentVector - (2 * glm::dot(incidentVector, interpolatedNormal)) * interpolatedNormal;
+				RayTriangleIntersection rti_ref = getClosestIntersection(rti.intersectionPoint, reflectionVector);
+				
+				float u = envMap.width * (0.5f + std::atan2(reflectionVector.z, reflectionVector.x) / (2.0f * PI));
+				float v = envMap.height * (0.5f - std::asin(reflectionVector.y) / PI);
 
-			int intU = (int)round(u) % (int)(envMap.width);
-			int intV = (int)round(v) % (int)(envMap.height);
-			colour = get_bitMap(intU,intV);
-
-		}
-		else colour = finalColour(rti);
-	} else if (depth != 0) {
-		colour = calculateCubeMap(direction);
+				int intU = (int)round(u) % (int)(envMap.width);
+				int intV = (int)round(v) % (int)(envMap.height);
+				colour = get_bitMap(intU,intV);
+			} else {
+				return (255 << 24) + (255 << 16) + (255 << 8) + 255;
+			}
+		} else colour = finalColour(rti);
 	}
 	return colour;
 }
@@ -999,6 +1003,11 @@ void handleEvent(SDL_Event event, DrawingWindow &window) {
 	}
 }
 
+void resetCamera() {
+	cameraPosition = glm::vec3(0,0,6);
+	cameraOrientation = glm::mat3(1.0);
+}
+
 int main(int argc, char *argv[]) {
 	DrawingWindow window = DrawingWindow(WIDTH, HEIGHT, false);
 	SDL_Event event;
@@ -1019,9 +1028,9 @@ int main(int argc, char *argv[]) {
     }
 	bitMap = m;
 
-
 	lights.push_back(light);
 	initialize_lights();
+
 	// draw(window);
 	while (true) {
 		// We MUST poll for events - otherwise the window will freeze !
@@ -1029,5 +1038,64 @@ int main(int argc, char *argv[]) {
 		draw(window);
 		// Need to render the frame at the end, or nothing actually gets shown on the screen !
 		window.renderFrame();
+		// if (frame <= 160) {
+		// // 	20sec
+		// // 	2sec, 16frame - pointcloud - orbit right (0,16)
+		// // 	2sec - rasterising - orbit left (17, 32)
+		// // 	4sec - raytracing (glass, mirror, env off) - orbit right (33, 64) (63 - mirror, glass on)
+		// //  4sec - raytracing (glass, mirror on) -> - orbit right (65, 96) (65, 79 off)
+		// //  4sec - raytracing (add sphere, env on) -> orbit left (97, 128) (113, 127 off)
+		// //  4sec - raytracing (add sphere, zoom in) (129, 160)
+		// 	if (frame == 0) resetCamera();
+		// 	else if (frame <= 16) {
+		// 		draw_mode = 0;
+		// 		rotate_camera(false, -PI / 8);
+		// 	} else if (frame <= 32) {
+		// 		draw_mode = 1;
+		// 		rotate_camera(false, PI / 8);
+		// 	} else if (frame <= 62) {
+		// 		draw_mode = 2;
+		// 		mirror_mode = false;
+		// 		glass_mode = false;
+		// 		env_mode = false;
+		// 		rotate_camera(true, PI / 16);
+		// 	} else if (frame == 63) {
+		// 		mirror_mode = true;
+		// 		glass_mode = true;
+		// 		rotate_camera(true, PI / 16);
+		// 	} else if (frame <= 64) {
+		// 		rotate_camera(true, PI / 16);
+		// 	} else if (frame >= 65 && frame <= 79) {
+		// 		mirror_mode = false;
+		// 		rotate_camera(false, PI / 16);
+		// 	} else if (frame >= 80 && frame <= 96) {
+		// 		mirror_mode = true;
+		// 		rotate_camera(false, PI / 16);
+		// 	} else if (frame >= 80 && frame <= 96) {
+		// 		mirror_mode = true;
+		// 		rotate_camera(false, PI / 16);
+		// 	} else if (frame >= 97 && frame <= 112) {
+		// 		parseFiles(sphere, mtlFile, 0.35, glm::vec3(0.35f, -0.57f, -0.1f));
+		// 		env_mode = true;
+		// 		rotate_camera(false, -PI / 16);
+		// 	} else if (frame >= 113 && frame <= 127) {
+		// 		mirror_mode = false;
+		// 		rotate_camera(false, -PI / 16);
+		// 	} else if (frame == 128){
+		// 		mirror_mode = true;
+		// 		rotate_camera(false, -PI / 16);
+		// 	} else if (frame <= 160) {
+		// 		cameraPosition += glm::vec3(0.35/32, -0.05/32, -5.2/32);
+		// 	}
+		// // 0,0, 6
+		// // 0.35 -0.05 0.8
+		// 	draw(window);
+		// 	window.renderFrame();
+
+		// 	std::ostringstream filename;
+		// 	filename << "screenshot/" << "output" << frame << ".ppm";
+		// 	window.savePPM(filename.str().c_str());
+		// 	frame++;
+		// }
 	}
 }
